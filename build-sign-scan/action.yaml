@@ -9,6 +9,8 @@ inputs:
     required: true
   docker_registry:
     default: "artifactory.algol60.net"
+  docker_build_args:
+    default: ""
   context_path:
     required: true
   artifactory_algol60_token:
@@ -72,6 +74,7 @@ runs:
           ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
           ${{ inputs.docker_additional_tags }}
         labels: buildDate=${{ steps.date.outputs.now }}
+        build-args: ${{ inputs.docker_build_args }}
 
     - name: Sign
       run: |

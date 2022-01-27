@@ -165,7 +165,9 @@ runs:
       if: ${{ inputs.images == '' && (steps.check.outputs.stable == 'true' && inputs.stable-images == '' || inputs.unstable-images == '') }}
       env:
         STABILITY: ${{ steps.check.outputs.stable == 'true' && 'stable' || 'unstable' }}
-      run: echo "::error:: No images specified for ${STABILITY} build"
+      run: |
+        echo "::error::No images specified for ${STABILITY} build"
+        exit 1
 
     - name: Set images
       id: images
@@ -173,7 +175,8 @@ runs:
         IMAGES: |
           ${{ inputs.images }}
           ${{ steps.check.outputs.stable == 'true' && inputs.stable-images || inputs.unstable-images }}
-      run: echo "::set-output name=images::$(sed -e '/^[[:space:]]*$/d' <<< "$IMAGES")"
+      run: |
+        echo "::set-output name=images::$(sed -e '/^[[:space:]]*$/d' <<< "$IMAGES")"
 
     - name: Generate tags and labels
       id: meta
@@ -226,5 +229,6 @@ runs:
       env:
         IMAGES: ${{ steps.images.outputs.images }}
         DIGEST: ${{ steps.build.outputs.digest }}
-      run: echo "::set-output name=refs::$(jq -R --arg digest "$DIGEST" '. + "@" + $digest' <<< "$IMAGES" | jq -sc)"
+      run: |
+        echo "::set-output name=refs::$(jq -R --arg digest "$DIGEST" '. + "@" + $digest' <<< "$IMAGES" | jq -sc)"
 

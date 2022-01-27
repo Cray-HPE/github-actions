@@ -12,8 +12,7 @@ with a valid [SemVer] Git tag, e.g., `vX.Y.Z` which corresponds to version
   `stable-images` to generate tags. _Unstable_ builds use image repositories
   specified in `images` and `unstable-images` to generate tags.
 
-* All images are tagged with a `sha-` tag based on the Git commit. In addition,
-  the default `generate-tags` settings generate image tags for:
+* The default `generate-tags` settings generate image tags for:
 
     * _Stable_ images based on corresponding SemVer Git tags, e.g., `X.Y.Z`,
       `X.Y`, and `X` (unless `X` is `0`) as well as `latest`.
@@ -24,6 +23,8 @@ with a valid [SemVer] Git tag, e.g., `vX.Y.Z` which corresponds to version
         * A [push event] to `refs/heads/feature/branch` gets tag
           `feature-branch`
         * A [schedule event] gets a tag based on date
+
+    * All images based on Git commit, e.g., `sha-`.
 
 * Distinct image references pinned to digests are available in the `refs`
   output. They are suitable image references for signing and scanning as shown

@@ -25,6 +25,7 @@ inputs:
       type=semver,pattern={{version}}
       type=semver,pattern={{major}}.{{minor}}
       type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+      type=sha,format=long
   flavor:
     description: Flavors to apply
     required: false
@@ -185,9 +186,7 @@ runs:
       uses: docker/metadata-action@v3
       with:
         images: ${{ steps.images.outputs.images }}
-        tags: |
-          type=sha,format=long
-          ${{ inputs.generate-tags }}
+        tags: ${{ inputs.generate-tags }}
         flavor: ${{ inputs.flavor }}
         labels: |
           ${{ inputs.vendor != '' && format('org.opencontainers.image.vendor={0}', inputs.vendor) }}

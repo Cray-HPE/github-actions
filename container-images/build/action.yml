@@ -165,6 +165,7 @@ runs:
       if: ${{ inputs.images == '' && (steps.check.outputs.stable == 'true' && inputs.stable-images == '' || inputs.unstable-images == '') }}
       env:
         STABILITY: ${{ steps.check.outputs.stable == 'true' && 'stable' || 'unstable' }}
+      shell: bash
       run: |
         echo "::error::No images specified for ${STABILITY} build"
         exit 1
@@ -175,6 +176,7 @@ runs:
         IMAGES: |
           ${{ inputs.images }}
           ${{ steps.check.outputs.stable == 'true' && inputs.stable-images || inputs.unstable-images }}
+      shell: bash
       run: |
         echo "::set-output name=images::$(sed -e '/^[[:space:]]*$/d' <<< "$IMAGES")"
 
@@ -188,7 +190,7 @@ runs:
           ${{ inputs.generate-tags }}
         flavor: ${{ inputs.flavor }}
         labels: |
-          ${{ inputs.vendor && format('org.opencontainers.image.vendor={0}, inputs.vendor) }}
+          ${{ inputs.vendor != '' && format('org.opencontainers.image.vendor={0}', inputs.vendor) }}
           ${{ inputs.labels }}
         github-token: ${{ inputs.github-token }}
 

@@ -32,9 +32,6 @@ inputs:
     description: Value of `org.opencontainers.image.vendor` label
     required: false
     default: Hewlett Packard Enterprise Development LP
-  labels:
-    description: List of metadata for an image
-    required: false
 
   # Inputs passed through to docker/build-push-action
   allow:

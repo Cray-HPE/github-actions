@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      context: read
+      contents: read
 
     outputs:
       refs: ${{ steps.build.outputs.refs }}

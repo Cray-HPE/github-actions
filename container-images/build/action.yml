@@ -3,7 +3,7 @@ description: Build and push container images with docker/metadata-action and doc
 author: Cray-HPE
 branding:
   icon: anchor
-  color: blue
+  color: green
 
 inputs:
   images:

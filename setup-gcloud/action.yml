@@ -1,0 +1,36 @@
+name: Setup Google Cloud
+description: Authenticate to Google Cloud via [workload identity federation](https://cloud.google.com/iam/docs/workload-identity-federation)
+author: Cray-HPE
+branding:
+  icon: cloud
+  color: green
+
+inputs:
+  workload-identity-provider:
+    description: Google auth workload identity provider
+    required: false
+    default: 'projects/672506737953/locations/global/workloadIdentityPools/github-cray-hpe/providers/github'
+  service-account:
+    description: Google auth service account
+    required: false
+    default: 'cosign@sdlc-ops.iam.gserviceaccount.com'
+
+outputs:
+  cosign-build-key:
+    description: Cosign build key (GCP KMS URL)
+    value: 'gcpkms://projects/sdlc-ops/locations/global/keyRings/csm-builds/cryptoKeys/github-cray-hpe/versions/1'
+
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v0
+      with:
+        workload_identity_provider: ${{ inputs.workload-identity-provider }}
+        service_account: ${{ inputs.service-account }}
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v0
+
+    - name: Use gcloud CLI
+      run: gcloud info

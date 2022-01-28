@@ -1,0 +1,17 @@
+name: Setup Cosign
+description: Setup Cosign
+author: Cray-HPE
+branding:
+  icon: shield
+  color: green
+
+runs:
+  using: composite
+  steps:
+    - name: Install cosign
+      uses: sigstore/cosign-installer@main
+
+    - name: Check cosign install
+      run: cosign version
+
+

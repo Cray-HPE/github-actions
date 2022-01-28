@@ -1,0 +1,27 @@
+name: Sign container images
+description: Sign container images using Cosign
+author: Cray-HPE
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  key:
+    description: Cosign key
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Sign image with key
+      if: ${{ inputs.key }}
+      env:
+        IMAGES: ${{ inputs.images }}
+        KEY: ${{ inputs.key }}
+      run: sed -e '/^[[:space:]]*$/d' <<< "$IMAGES" | xargs -t cosign sign --key "$KEY"
+
+    - name: Sign image with GitHub OIDC Token
+      env:
+        COSIGN_EXPERIMENTAL: 1
+        IMAGES: ${{ inputs.images }}
+      run: sed -e '/^[[:space:]]*$/d' <<< "$IMAGES" | xargs -t cosign sign

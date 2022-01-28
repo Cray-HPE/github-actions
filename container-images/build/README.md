@@ -74,11 +74,7 @@ jobs:
           username: ${{ secrets.ARTIFACTORY_ALGOL60_USERNAME }}
           password: ${{ secrets.ARTIFACTORY_ALGOL60_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+      - uses: Cray-HPE/github-actions/setup-docker-buildx
 
       - name: Build image
         id: build
@@ -97,17 +93,12 @@ jobs:
       id-token: write
 
     steps:
-      - name: Install cosign
-        uses: sigstore/cosign-installer@main
+      - uses: Cray-HPE/github-actions/setup-cosign
 
-      - name: Check cosign install
-        run: cosign version
-
-      - name: Sign images with GitHub OIDC Token **not production ready**
-        env:
-          IMAGES: ${{ join(fromJSON(needs.build.outputs.refs), ' ') }}
-          COSIGN_EXPERIMENTAL: 1
-        run: cosign sign "$IMAGES"
+      - name: Sign image
+        uses: Cray-HPE/github-actions/container-images/sign
+        with:
+          images: ${{ join(fromJSON(needs.build.outputs.refs), '\n') }}
 
   trivy:
     name: Scan image for fixable vulnerabilities

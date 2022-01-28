@@ -93,10 +93,10 @@ jobs:
       id-token: write
 
     steps:
-      - uses: Cray-HPE/github-actions/setup-cosign
+      - uses: Cray-HPE/github-actions/setup-cosign@main
 
       - name: Sign image
-        uses: Cray-HPE/github-actions/container-images/sign
+        uses: Cray-HPE/github-actions/container-images/sign@main
         with:
           images: ${{ join(fromJSON(needs.build.outputs.refs), '\n') }}
 

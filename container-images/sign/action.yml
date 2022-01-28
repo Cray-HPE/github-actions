@@ -24,6 +24,9 @@ runs:
       shell: bash
       run: sed -e '/^[[:space:]]*$/d' <<< "$IMAGES" | xargs -t cosign sign --key "$KEY"
 
+    - shell: bash
+      run: sleep 10
+
     - name: Sign image with GitHub OIDC Token
       env:
         COSIGN_EXPERIMENTAL: 1

@@ -10,7 +10,10 @@ with a valid [SemVer] Git tag, e.g., `vX.Y.Z` which corresponds to version
 
 * _Stable_ builds use image repositories specified in `images` and
   `stable-images` to generate tags. _Unstable_ builds use image repositories
-  specified in `images` and `unstable-images` to generate tags.
+  specified in `images` and `unstable-images` to generate tags. This means
+  callers must at least specify `images` or both `stable-images` and
+  `unstable-images`, unless the workflow is limited to only _stable_ or
+  _unstable_ builds.
 
 * The default `tags` settings generate image tags for:
 
@@ -135,15 +138,14 @@ jobs:
 
 > `CSV` type is a comma-delimited string
 
-| Name         | Type      | Default                                     | Description                                                                                                                                |
-| ------------ | --------- | --------------------------------------      | --------------                                                                                                                             |
-| `images`     | List      |                                             | List of image repositories to use as base name for generated tags                                                                          |
-| `registry`   | String    | `artifactory.algol60.net/csm-docker`        | Image registry                                                                                                                             |
-| `stable`     | Boolean   | _auto_                                      | Indicates image _stability_; by default stable images require [SemVer] Git tag                                                             |
-| `name`       | String    |                                             | Image name, if given generate image repository and append to `images`                                                                      |
-| `tags`       | List      | (See [action.yml])                          | List of [tags](https://github.com/docker/metadata-action#tags-input) as key-value pair attributes, always generates `type=sha,format=long` |
-| `flavor`     | List      |                                             | [Flavor](https://github.com/docker/metadata-action#flavor-input) to apply                                                                  |
-| `vendor`     | String    | `Hewlett Packard Enterprise Development LP` | Value of `org.opencontainers.image.vendor` label                                                                                           |
+| Name              | Type      | Default                                     | Description                                                                                                                                |
+| ------------      | --------- | --------------------------------------      | --------------                                                                                                                             |
+| `images`          | List      |                                             | List of image repositories to use as base name for generated tags in _all_ builds                                                          |
+| `stable-images`   | List      |                                             | List of image repositories to use as base name for generated tags in _stable_ builds                                                       |
+| `unstable-images` | List      |                                             | List of image repositories to use as base name for generated tags in _unstable_ builds                                                     |
+| `tags`            | List      | (See [action.yml])                          | List of [tags](https://github.com/docker/metadata-action#tags-input) as key-value pair attributes, always generates `type=sha,format=long` |
+| `flavor`          | List      |                                             | [Flavor](https://github.com/docker/metadata-action#flavor-input) to apply                                                                  |
+| `vendor`          | String    | `Hewlett Packard Enterprise Development LP` | Value of `org.opencontainers.image.vendor` label                                                                                           |
 
 Inputs passed through to [docker/build-push-action]:
 

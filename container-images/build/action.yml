@@ -215,10 +215,10 @@ runs:
 
     - name: Set image references
       id: image-refs
-      shell: bash
       env:
         IMAGES: ${{ steps.images.outputs.images }}
         DIGEST: ${{ steps.build.outputs.digest }}
+      shell: bash
       run: |
         echo "::set-output name=refs::$(jq -R --arg digest "$DIGEST" '. + "@" + $digest' <<< "$IMAGES" | jq -sc)"
 

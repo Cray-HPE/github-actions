@@ -12,6 +12,7 @@ runs:
       uses: sigstore/cosign-installer@main
 
     - name: Check cosign install
+      shell: bash
       run: cosign version
 
 

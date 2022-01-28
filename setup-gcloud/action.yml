@@ -33,4 +33,5 @@ runs:
       uses: google-github-actions/setup-gcloud@v0
 
     - name: Use gcloud CLI
+      shell: bash
       run: gcloud info

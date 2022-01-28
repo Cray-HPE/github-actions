@@ -12,7 +12,7 @@ with a valid [SemVer] Git tag, e.g., `vX.Y.Z` which corresponds to version
   `stable-images` to generate tags. _Unstable_ builds use image repositories
   specified in `images` and `unstable-images` to generate tags.
 
-* The default `generate-tags` settings generate image tags for:
+* The default `tags` settings generate image tags for:
 
     * _Stable_ images based on corresponding SemVer Git tags, e.g., `X.Y.Z`,
       `X.Y`, and `X` (unless `X` is `0`) as well as `latest`.
@@ -22,7 +22,6 @@ with a valid [SemVer] Git tag, e.g., `vX.Y.Z` which corresponds to version
         * A [pull request event] for `refs/pull/2/merge` gets tag `pr-2`
         * A [push event] to `refs/heads/feature/branch` gets tag
           `feature-branch`
-        * A [schedule event] gets a tag based on date
 
     * All images based on Git commit, e.g., `sha-`.
 
@@ -145,16 +144,15 @@ jobs:
 
 > `CSV` type is a comma-delimited string
 
-| Name            | Type      | Default                                     | Description                                                                                                                                |
-| ------------    | --------- | --------------------------------------      | --------------                                                                                                                             |
-| `images`        | List      |                                             | List of image repositories to use as base name for generated tags                                                                          |
-| `registry`      | String    | `artifactory.algol60.net/csm-docker`        | Image registry                                                                                                                             |
-| `stable`        | Boolean   | _auto_                                      | Indicates image _stability_; by default stable images require [SemVer] Git tag                                                             |
-| `name`          | String    |                                             | Image name, if given generate image repository and append to `images`                                                                      |
-| `generate-tags` | List      | (See [action.yml])                          | List of [tags](https://github.com/docker/metadata-action#tags-input) as key-value pair attributes, always generates `type=sha,format=long` |
-| `flavor`        | List      |                                             | [Flavor](https://github.com/docker/metadata-action#flavor-input) to apply                                                                  |
-| `vendor`        | String    | `Hewlett Packard Enterprise Development LP` | Value of `org.opencontainers.image.vendor` label                                                                                           |
-| `labels`        | List      |                                             | List of custom labels                                                                                                                      |
+| Name         | Type      | Default                                     | Description                                                                                                                                |
+| ------------ | --------- | --------------------------------------      | --------------                                                                                                                             |
+| `images`     | List      |                                             | List of image repositories to use as base name for generated tags                                                                          |
+| `registry`   | String    | `artifactory.algol60.net/csm-docker`        | Image registry                                                                                                                             |
+| `stable`     | Boolean   | _auto_                                      | Indicates image _stability_; by default stable images require [SemVer] Git tag                                                             |
+| `name`       | String    |                                             | Image name, if given generate image repository and append to `images`                                                                      |
+| `tags`       | List      | (See [action.yml])                          | List of [tags](https://github.com/docker/metadata-action#tags-input) as key-value pair attributes, always generates `type=sha,format=long` |
+| `flavor`     | List      |                                             | [Flavor](https://github.com/docker/metadata-action#flavor-input) to apply                                                                  |
+| `vendor`     | String    | `Hewlett Packard Enterprise Development LP` | Value of `org.opencontainers.image.vendor` label                                                                                           |
 
 Inputs passed through to [docker/build-push-action]:
 
@@ -168,6 +166,7 @@ Inputs passed through to [docker/build-push-action]:
 | `cgroup-parent`   | String     | Optional [parent cgroup](https://docs.docker.com/engine/reference/commandline/build/#use-a-custom-parent-cgroup---cgroup-parent) for the container used in the build              |
 | `context`         | String     | Build's context is the set of files located in the specified [`PATH` or `URL`](https://docs.docker.com/engine/reference/commandline/build/) (default [Git context](#git-context)) |
 | `file`            | String     | Path to the Dockerfile. (default `{context}/Dockerfile`)                                                                                                                          |
+| `labels`          | List       | List of metadata for an image                                                                                                                                                     |
 | `load`            | Boolean    | [Load](https://github.com/docker/buildx/blob/master/docs/reference/buildx_build.md#load) is a shorthand for `--output=type=docker` (default `false`)                              |
 | `network`         | String     | Set the networking mode for the `RUN` instructions during build                                                                                                                   |
 | `no-cache`        | Boolean    | Do not use cache when building the image (default `false`)                                                                                                                        |
@@ -179,7 +178,6 @@ Inputs passed through to [docker/build-push-action]:
 | `secret-files`    | List       | List of secret files to expose to the build (e.g., `key=filename`, `MY_SECRET=./secret.txt`)                                                                                      |
 | `shm-size`        | String     | Size of [`/dev/shm`](https://github.com/docker/buildx/blob/master/docs/reference/buildx_build.md#-size-of-devshm---shm-size) (e.g., `2g`)                                         |
 | `ssh`             | List       | List of SSH agent socket or keys to expose to the build                                                                                                                           |
-| `tags`            | List/CSV   | List of tags in addition to those generated by [docker/metadata-action], see `generate-tags`                                                                                      |
 | `target`          | String     | Sets the target stage to build                                                                                                                                                    |
 | `ulimit`          | List       | [Ulimit](https://github.com/docker/buildx/blob/master/docs/reference/buildx_build.md#-set-ulimits---ulimit) options (e.g., `nofile=1024:1024`)                                    |
 | `github-token`    | String     | GitHub Token used to authenticate against a repository for Git context (default `${{ github.token }}`)                                                                            |
@@ -195,17 +193,16 @@ Inputs passed through to [docker/build-push-action]:
 | --------------- | --------- | --------------------------------------------------------------- |
 | `stable`        | Boolean   | Indicates if build was stable                                   |
 | `images`        | List      | List of image repositories used as base name for generated tags |
-| `tags`          | List      | List of all image tags                                          |
 | `refs`          | JSON      | Array of image refs pinned to digest                            |
 
 Outputs from [docker/metadata-action]:
 
-| Name               | Type    | Description                     |
-| ------------------ | ------- | ------------------------------- |
-| `version`          | String  | Generated image version         |
-| `generated-tags`   | List    | List of generated image tags    |
-| `labels`           | List    | List of generated image labels  |
-| `json`             | JSON    | JSON output of tags and labels  |
+| Name            | Type      | Description                     |
+| --------------- | --------- | ------------------------------- |
+| `version`       | String    | Generated image version         |
+| `tags`          | List      | List of generated image tags    |
+| `labels`        | List      | List of generated image labels  |
+| `json`          | JSON      | JSON output of tags and labels  |
 
 Outputs from [docker/build-push-action]:
 

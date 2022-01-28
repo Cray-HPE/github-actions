@@ -15,11 +15,10 @@ inputs:
   unstable-images:
     description: List of image repositories to use as base name for generated tags for _unstable_ builds
     required: false
-  generate-tags:  # Renamed since docker/build-push-action supports tags
+  tags:
     description: List of tags as key-value pair attributes to generate
     required: false
     default: |-
-      type=schedule
       type=ref,event=branch
       type=ref,event=pr
       type=semver,pattern={{version}}
@@ -99,9 +98,6 @@ inputs:
   ssh:
     description: "List of SSH agent socket or keys to expose to the build"
     required: false
-  tags:
-    description: "List of tags"
-    required: false
   target:
     description: "Sets the target stage to build"
     required: false
@@ -123,14 +119,9 @@ outputs:
   version:
     description: Generated image version
     value: ${{ steps.meta.outputs.version }}
-  generated-tags:
+  tags:
     description: List of generated image tags
     value: ${{ steps.meta.outputs.tags }}
-  tags:
-    description: List of all image tags applied to image
-    value: |
-      ${{ steps.meta.outputs.tags }}
-      ${{ inputs.tags }}
   labels:
     description: List of generated image labels
     value: ${{ steps.meta.outputs.labels }}
@@ -186,7 +177,7 @@ runs:
       uses: docker/metadata-action@v3
       with:
         images: ${{ steps.images.outputs.images }}
-        tags: ${{ inputs.generate-tags }}
+        tags: ${{ inputs.tags }}
         flavor: ${{ inputs.flavor }}
         labels: |
           ${{ inputs.vendor != '' && format('org.opencontainers.image.vendor={0}', inputs.vendor) }}
@@ -217,9 +208,7 @@ runs:
         secret-files: ${{ inputs.secret-files }}
         shm-size: ${{ inputs.shm-size }}
         ssh: ${{ inputs.ssh }}
-        tags: |
-          ${{ steps.meta.outputs.tags }}
-          ${{ inputs.tags }}
+        tags: ${{ steps.meta.outputs.tags }}
         target: ${{ inputs.target }}
         ulimit: ${{ inputs.ulimit }}
         github-token: ${{ inputs.github-token }}

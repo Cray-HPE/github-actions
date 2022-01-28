@@ -18,10 +18,12 @@ runs:
       env:
         IMAGES: ${{ inputs.images }}
         KEY: ${{ inputs.key }}
+      shell: bash
       run: sed -e '/^[[:space:]]*$/d' <<< "$IMAGES" | xargs -t cosign sign --key "$KEY"
 
     - name: Sign image with GitHub OIDC Token
       env:
         COSIGN_EXPERIMENTAL: 1
         IMAGES: ${{ inputs.images }}
+      shell: bash
       run: sed -e '/^[[:space:]]*$/d' <<< "$IMAGES" | xargs -t cosign sign

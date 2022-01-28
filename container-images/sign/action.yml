@@ -6,6 +6,9 @@ branding:
   color: green
 
 inputs:
+  images:
+    description: List of container images to sign
+    required: true
   key:
     description: Cosign key
     required: false

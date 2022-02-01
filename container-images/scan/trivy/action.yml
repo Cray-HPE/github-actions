@@ -1,0 +1,120 @@
+name: Trivy
+description: ...
+author: Cray-HPE
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  image:
+    description: Image reference
+    required: true
+  ignore-unfixed:
+    description: Ignore unpatched/unfixed vulnerabilities
+    required: false
+    default: 'false'
+  vuln-type:
+    description: Comma-separated list of vulnerability types
+    required: false
+    default: 'os,library'
+  severity:
+    description: Severities of vulnerabilities to be scanned for and displayed
+    required: false
+    default: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+  timeout:
+    description: Timeout (default 5m)
+    required: false
+  ignore-policy:
+    description: Filter vulnerabilities with OPA rego language
+    required: false
+  list-all-pkgs:
+    description: Output all packages regardless of vulnerability
+    required: false
+    default: 'false'
+
+  upload-results:
+    description: Upload Trivy results as build artifact
+    required: false
+    default: 'true'
+  retention-days:
+    description: Number of days to retain scan results
+    required: false
+    default: '5'
+  upload-sarif:
+    description: Upload SARIF results to Security Code Scanning tab
+    required: false
+    default: 'false'
+  sarif-ignore-unfixed:
+    description: Ignore unfixed vulnerabilities in SARIF results
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    # Get default Trivy results (table format)
+    - name: Run Trivy vulnerability scanner
+      id: scan
+      uses: aquasecurity/trivy-action@master
+      continue-on-error: true
+      with:
+        image-ref: ${{ inputs.image }}
+        exit-code: '1'
+        output: trivy.txt
+        ignore-unfixed: ${{ inputs.ignore-unfixed }}
+        vuln-type: ${{ inputs.vuln-type }}
+        severity: ${{ inputs.severity }}
+        timeout: ${{ inputs.timeout }}
+        ignore-policy: ${{ inputs.ignore-policy }}
+        list-all-pkgs: ${{ inputs.list-all-pkgs }}
+
+    # Run Trivy again to get JSON results -- Trivy uses results cached from previous run
+    - name: Run Trivy vulnerability scanner (JSON results)
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ inputs.image }}
+        format: table
+        output: trivy.json
+        ignore-unfixed: ${{ inputs.ignore-unfixed }}
+        vuln-type: ${{ inputs.vuln-type }}
+        severity: ${{ inputs.severity }}
+        timeout: ${{ inputs.timeout }}
+        ignore-policy: ${{ inputs.ignore-policy }}
+        list-all-pkgs: ${{ inputs.list-all-pkgs }}
+
+    - name: Upload results
+      if: ${{ inputs.upload-results == 'true' }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: trivy-results
+        path: |
+          trivy.txt
+          trivy.json
+        retention-days: ${{ inputs.retention-days }}
+
+    # Run Trivy a third time to get just the fixable vulnerabilities
+    - name: Run Trivy vulnerability scanner (**fixable**)
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ inputs.image }}
+        ignore-unfixed: ${{ inputs.sarif-ignore-unfixed }}
+        format: template
+        template: '@/contrib/sarif.tpl'
+        output: trivy.sarif
+        vuln-type: ${{ inputs.vuln-type }}
+        severity: ${{ inputs.severity }}
+        timeout: ${{ inputs.timeout }}
+        ignore-policy: ${{ inputs.ignore-policy }}
+        list-all-pkgs: ${{ inputs.list-all-pkgs }}
+
+    - name: Upload fixable vulnerabilities to GitHub Code Scanning
+      if: ${{ hashFiles('trivy.sarif') != ''}}
+      uses: github/codeql-action/upload-sarif@v1
+      with:
+        sarif_file: trivy.sarif
+
+    - name: Check if scans found vulnerabilities
+      if: ${{ steps.scan.outcome == 'failure' }}
+      run: echo "::error::Trivy scan found vulnerabilities"
+

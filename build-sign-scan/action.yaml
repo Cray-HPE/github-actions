@@ -57,7 +57,7 @@ runs:
         password: ${{ inputs.artifactory_algol60_token }}
 
     - name: Set up Cloud SDK for Signing
-      uses: google-github-actions/setup-gcloud@master
+      uses: google-github-actions/setup-gcloud@v0
       with:
         project_id: ${{ inputs.cosign_gcp_project_id }}
         service_account_key: ${{ inputs.cosign_gcp_sa_key }}

@@ -1,0 +1,64 @@
+name: Parse SemVer
+description: Parses SemVer from a specified version
+author: Cray-HPE
+
+inputs:
+  version:
+    description: Version string to parse
+    required: true
+  regex:
+    description: Regex pattern to match SemVer substring in specified version; must define `version` match group (e.g., `^refs/tags/v?(?P<version>.*)$`)
+    required: false
+outputs:
+  version:
+    description: Normalized version string
+    value: ${{ steps.parse.outputs.version }}
+  major:
+    description: Major part of version
+    value: ${{ steps.parse.outputs.major }}
+  minor:
+    description: Minor part of version
+    value: ${{ steps.parse.outputs.minor }}
+  patch:
+    description: Patch part of version
+    value: ${{ steps.parse.outputs.patch }}
+  prerelease:
+    description: Prerelease part of version
+    value: ${{ steps.parse.outputs.prerelease }}
+  build:
+    description: Build part of version
+    value: ${{ steps.parse.outputs.build }}
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: pip3 install --disable-pip-version-check --no-cache-dir semver
+
+    - id: parse
+      env:
+        VERSION: ${{ inputs.version }}
+        REGEX: ${{ inputs.regex }}
+      shell: python3 {0}
+      run: |
+        import os
+        import re
+        import semver
+
+        version = os.environ['VERSION']
+        regex = os.environ['REGEX']
+
+        if regex:
+          match = re.match(regex, version)
+          if match is not None:
+              version = match.group('version')
+
+        try:
+            version = semver.VersionInfo.parse(version)
+        except ValueError:
+            print("::set-output name=version::")
+        else:
+            print(f"::set-output name=version::{version}")
+            for k, v in version._asdict().items():
+              v = v or ''
+              print(f"::set-output name={k}::{v}")

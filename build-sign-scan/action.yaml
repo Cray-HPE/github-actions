@@ -13,6 +13,8 @@ inputs:
     required: true
   artifactory_algol60_token:
     required: true
+  # Not needed - it is part of cosign_gcp_sa_key JSON structure
+  # Left for backward compatibility
   cosign_gcp_project_id:
     required: true
   cosign_gcp_sa_key:
@@ -56,12 +58,13 @@ runs:
         username: github-actions-cray-hpe
         password: ${{ inputs.artifactory_algol60_token }}
 
+    - name: Authenticate to GCP for Signing
+      uses: google-github-actions/auth@v0
+      with:
+        credentials_json: ${{ inputs.cosign_gcp_sa_key }}
+
     - name: Set up Cloud SDK for Signing
       uses: google-github-actions/setup-gcloud@v0
-      with:
-        project_id: ${{ inputs.cosign_gcp_project_id }}
-        service_account_key: ${{ inputs.cosign_gcp_sa_key }}
-        export_default_credentials: true
 
     - name: Build Image
       uses: docker/build-push-action@v2

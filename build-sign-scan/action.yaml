@@ -89,7 +89,10 @@ runs:
       uses: snyk/actions/setup@master
 
     - name: Snyk Scan
-      run: snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }} || (exit ${{ inputs.fail_on_snyk_errors && '0' || '1' }} )
+      run: |
+        # build-push-action may have restored old image, present on node prior to build
+        docker pull ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
+        snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }} || (exit ${{ inputs.fail_on_snyk_errors && '0' || '1' }} )
       shell: bash
       env:
         SNYK_TOKEN: ${{ inputs.snyk_token }}

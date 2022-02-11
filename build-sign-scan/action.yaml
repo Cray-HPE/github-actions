@@ -67,6 +67,7 @@ runs:
       uses: google-github-actions/setup-gcloud@v0
 
     - name: Build Image
+      id: build_image
       uses: docker/build-push-action@v2
       with:
         context: ${{ inputs.context_path }}
@@ -79,7 +80,7 @@ runs:
     - name: Sign
       run: |
         if [[ "true" == "${{ inputs.docker_push }}" ]]; then
-          COSIGN_KEY=${{ inputs.cosign_key }} cosign sign -key ${{ inputs.cosign_key }} -a GIT_HASH=${{ inputs.github_sha }} ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
+          COSIGN_KEY=${{ inputs.cosign_key }} cosign sign -key ${{ inputs.cosign_key }} -a GIT_HASH=${{ inputs.github_sha }} ${{ steps.build_image.outputs.digest }}
         else
           echo "Skipping sign when not pushing to registry"
         fi
@@ -89,10 +90,7 @@ runs:
       uses: snyk/actions/setup@master
 
     - name: Snyk Scan
-      run: |
-        # build-push-action may have restored old image, present on node prior to build
-        docker pull ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
-        snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }} || (exit ${{ inputs.fail_on_snyk_errors && '0' || '1' }} )
+      run: snyk test --docker ${{ steps.build_image.outputs.digest }} || (exit ${{ inputs.fail_on_snyk_errors && '0' || '1' }} )
       shell: bash
       env:
         SNYK_TOKEN: ${{ inputs.snyk_token }}

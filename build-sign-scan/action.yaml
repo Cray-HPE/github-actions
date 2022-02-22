@@ -72,6 +72,7 @@ runs:
       with:
         context: ${{ inputs.context_path }}
         push: ${{ inputs.docker_push }}
+        load: ${{ (inputs.docker_push != 'true') && 'true' || 'false' }}
         tags: |
           ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
           ${{ inputs.docker_additional_tags }}
@@ -80,7 +81,7 @@ runs:
     - name: Sign
       run: |
         if [[ "true" == "${{ inputs.docker_push }}" ]]; then
-          COSIGN_KEY=${{ inputs.cosign_key }} cosign sign -key ${{ inputs.cosign_key }} -a GIT_HASH=${{ inputs.github_sha }} ${{ inputs.docker_repo }}@${{ steps.build_image.outputs.digest }}
+          COSIGN_KEY=${{ inputs.cosign_key }} cosign sign -key ${{ inputs.cosign_key }} -a GIT_HASH=${{ inputs.github_sha }} ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
         else
           echo "Skipping sign when not pushing to registry"
         fi
@@ -90,7 +91,7 @@ runs:
       uses: snyk/actions/setup@master
 
     - name: Snyk Scan
-      run: snyk test --docker ${{ inputs.docker_repo }}@${{ steps.build_image.outputs.digest }} || (exit ${{ inputs.fail_on_snyk_errors && '0' || '1' }} )
+      run: snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }} || (exit ${{ inputs.fail_on_snyk_errors && '0' || '1' }} )
       shell: bash
       env:
         SNYK_TOKEN: ${{ inputs.snyk_token }}

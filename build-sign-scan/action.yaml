@@ -1,3 +1,26 @@
+#
+# MIT License
+#
+# (C) Copyright 2021-2022 Hewlett Packard Enterprise Development LP
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
 name: Build Scan Push
 description: Builds, scans, and pushes docker images
 inputs:
@@ -13,12 +36,18 @@ inputs:
     required: true
   artifactory_algol60_token:
     required: true
-  # Not needed - it is part of cosign_gcp_sa_key JSON structure
-  # Left for backward compatibility
+  # Not used after conversion of google-github-actions/setup-gcloud to google-github-actions/auth
   cosign_gcp_project_id:
-    required: true
+    default: ""
+    deprecationMessage: "not used anymore."
+  # Deprecated in google-github-actions/auth if favor of workload identity provider authentication
   cosign_gcp_sa_key:
-    required: true
+    default: ""
+    deprecationMessage: "use cosign_gcp_workload_identity_provider and cosign_gcp_service_account instead."
+  cosign_gcp_workload_identity_provider:
+    default: ""
+  cosign_gcp_service_account:
+    default: ""
   cosign_key:
     required: true
   snyk_token:
@@ -48,11 +77,6 @@ runs:
       id: buildx
       uses: docker/setup-buildx-action@v1
 
-    - name: Install cosign
-      uses: sigstore/cosign-installer@main
-      with:
-        cosign-release: 'v1.0.0'
-
     - name: Login to algol60 Container Registry
       uses: docker/login-action@v1
       with:
@@ -60,13 +84,28 @@ runs:
         username: github-actions-cray-hpe
         password: ${{ inputs.artifactory_algol60_token }}
 
-    - name: Authenticate to GCP for Signing
+    - name: Install cosign
+      uses: sigstore/cosign-installer@main
+      if: ${{ inputs.docker_push == 'true' }}
+      with:
+        cosign-release: 'v1.0.0'
+
+    - name: Authenticate to GCP with Workload Identity Provider
       uses: google-github-actions/auth@v0
+      if: ${{ inputs.docker_push  == 'true' && inputs.cosign_gcp_workload_identity_provider && inputs.cosign_gcp_service_account }}
+      with:
+        workload_identity_provider: ${{ inputs.cosign_gcp_workload_identity_provider }}
+        service_account: ${{ inputs.cosign_gcp_service_account }}
+
+    - name: Authenticate to GCP with SA Key
+      uses: google-github-actions/auth@v0
+      if: ${{ inputs.docker_push == 'true' && inputs.cosign_gcp_sa_key }}
       with:
         credentials_json: ${{ inputs.cosign_gcp_sa_key }}
 
     - name: Set up Cloud SDK for Signing
       uses: google-github-actions/setup-gcloud@v0
+      if: ${{ inputs.docker_push == 'true' }}
 
     - name: Build Image
       uses: docker/build-push-action@v2
@@ -84,8 +123,9 @@ runs:
       run: |
         if [[ "true" == "${{ inputs.docker_push }}" ]]; then
           COSIGN_KEY=${{ inputs.cosign_key }} cosign sign -key ${{ inputs.cosign_key }} -a GIT_HASH=${{ inputs.github_sha }} ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
+          echo "::notice::Signed and pushed image ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}"
         else
-          echo "Skipping sign when not pushing to registry"
+          echo "::notice::Skipping sign when not pushing to registry"
         fi
       shell: bash
 

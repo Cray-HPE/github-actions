@@ -69,10 +69,6 @@ runs:
     - name: Checkout repo
       uses: actions/checkout@v2
 
-    - id: date
-      run: echo "::set-output name=now::$(date +'%Y-%m-%dT%H:%M:%S')"
-      shell: bash
-
     - name: Set up Docker Buildx
       id: buildx
       uses: docker/setup-buildx-action@v1
@@ -107,6 +103,35 @@ runs:
       uses: google-github-actions/setup-gcloud@v0
       if: ${{ inputs.docker_push == 'true' }}
 
+    - id: date
+      run: echo "::set-output name=now::$(date +'%Y-%m-%dT%H:%M:%S')"
+      shell: bash
+
+    - id: base-images
+      run: |
+        echo "::group::Evaluate Base Images"
+        base_images=""
+        for image in $(grep -i -E '^FROM .+:.+' ./${{ inputs.context_path }}/Dockerfile | awk '{ print $2 }'); do
+            docker pull $image
+            base_images="${base_images} $(docker inspect $image --format '{{ index .RepoDigests 0 }}')"
+        done
+        base_images=${base_images# }
+        echo "::set-output name=base_images::${base_images// /,}"
+        echo "::endgroup::"
+      shell: bash
+
+    - name: Evaluate Docker Metadata
+      id: meta
+      uses: docker/metadata-action@v3
+      with:
+        images: ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
+        tags: |
+          type=raw,value=${{ inputs.docker_tag }}
+        labels: |
+          org.opencontainers.image.vendor=Hewlett Packard Enterprise Development LP
+          baseImages=${{ steps.base-images.outputs.base_images }}
+          buildDate=${{ steps.date.outputs.now }}
+
     - name: Build Image
       uses: docker/build-push-action@v2
       with:
@@ -117,7 +142,7 @@ runs:
         tags: |
           ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
           ${{ inputs.docker_additional_tags }}
-        labels: buildDate=${{ steps.date.outputs.now }}
+        labels: ${{ steps.meta.outputs.labels }}
 
     - name: Sign
       run: |

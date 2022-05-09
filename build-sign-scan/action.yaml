@@ -112,6 +112,7 @@ runs:
         echo "::group::Evaluate Base Images"
         base_images=""
         for image in $(grep -i -E '^FROM .+:.+' ./${{ inputs.context_path }}/Dockerfile | awk '{ print $2 }'); do
+            echo "Pulling image $image ..."
             docker pull $image
             base_images="${base_images} $(docker inspect $image --format '{{ index .RepoDigests 0 }}')"
         done

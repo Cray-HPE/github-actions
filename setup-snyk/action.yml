@@ -1,0 +1,37 @@
+name: Setup Snyk
+description: Setup action provided by snyk.io randomly installs x86_64 or arm64 version, so we use
+  our own installer.
+author: Cray-HPE
+branding:
+  icon: shield
+  color: green
+
+runs:
+  using: composite
+  steps:
+    - name: Snyk setup
+      run: |
+        echo "::group::Setup Snyk"
+        if which snyk 2&>/dev/null; then
+            echo "::notice::Snyk version \"$(snyk --version)\" is already installed in $(which snyk)"
+        else
+            snyk_version=$(curl -SsL https://api.github.com/repos/snyk/snyk/releases/latest | jq -r '.name')
+            echo "Identified Snyk version as ${snyk_version}"
+            echo "Downloading binaries ..."
+            cd ${RUNNER_TEMP}
+            curl -SsL -O https://github.com/snyk/cli/releases/download/${snyk_version}/snyk-linux
+            curl -SsL -O https://github.com/snyk/cli/releases/download/${snyk_version}/snyk-linux.sha256
+            echo "Comparing SHA256 checksum ..."
+            if [ "$(sha256sum snyk-linux)" == "$(cat snyk-linux.sha256)" ]; then
+                mv snyk-linux ${RUNNER_TOOL_CACHE}/snyk
+                rm snyk-linux.sha256
+                chmod a+x ${RUNNER_TOOL_CACHE}/snyk
+                echo ${RUNNER_TOOL_CACHE} >> $GITHUB_PATH
+                echo "::notice::Snyk version \"$(${RUNNER_TOOL_CACHE}/snyk --version)\" is installed in ${RUNNER_TOOL_CACHE}/snyk"
+            else
+                echo "::error::SHA256 sum mismatch on downloaded file"
+                exit 1
+            fi
+        fi
+        echo "::endgroup::"
+      shell: bash

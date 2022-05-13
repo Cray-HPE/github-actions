@@ -13,7 +13,7 @@ runs:
       run: |
         echo "::group::Setup Snyk"
         if which snyk 2&>/dev/null; then
-            echo "::notice::Snyk version \"$(snyk --version)\" is already installed in $(which snyk)"
+            echo "Snyk version \"$(snyk --version)\" is already installed in $(which snyk)"
         else
             snyk_version=$(curl -SsL https://api.github.com/repos/snyk/snyk/releases/latest | jq -r '.name')
             echo "Identified Snyk version as ${snyk_version}"
@@ -27,7 +27,7 @@ runs:
                 rm snyk-linux.sha256
                 chmod a+x ${RUNNER_TOOL_CACHE}/snyk
                 echo ${RUNNER_TOOL_CACHE} >> $GITHUB_PATH
-                echo "::notice::Snyk version \"$(${RUNNER_TOOL_CACHE}/snyk --version)\" is installed in ${RUNNER_TOOL_CACHE}/snyk"
+                echo "Snyk version \"$(${RUNNER_TOOL_CACHE}/snyk --version)\" is installed in ${RUNNER_TOOL_CACHE}/snyk"
             else
                 echo "::error::SHA256 sum mismatch on downloaded file"
                 exit 1

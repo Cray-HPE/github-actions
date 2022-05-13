@@ -156,7 +156,7 @@ runs:
       shell: bash
 
     - name: Snyk Setup
-      uses: Cray-HPE/github-actions/setup-snyk@feature/setup-snyk
+      uses: Cray-HPE/github-actions/setup-snyk@main
 
     - name: Snyk Scan
       run: snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }} || (exit ${{ inputs.fail_on_snyk_errors && '0' || '1' }} )

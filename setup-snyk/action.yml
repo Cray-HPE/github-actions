@@ -1,3 +1,26 @@
+#
+# MIT License
+#
+# (C) Copyright 2022 Hewlett Packard Enterprise Development LP
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
 name: Setup Snyk
 description: Setup action provided by snyk.io randomly installs x86_64 or arm64 version, so we use
   our own installer.
@@ -13,15 +36,33 @@ runs:
       run: |
         echo "::group::Setup Snyk"
         set -e -o pipefail
+
+        function curl_retry() {
+            total=5
+            counter=1
+            sleep=5
+            while [ ${counter} -le ${total} ]; do
+                curl -SsLf $@ && return 0
+                if [ ${counter} -eq ${total} ]; then
+                    echo "Giving up ..." > /dev/stderr
+                    return 1
+                else
+                    echo "Attempt ${counter}/${total} failed, sleeping ${sleep} seconds before retry ..." > /dev/stderr
+                    counter=$(($counter + 1))
+                    sleep ${sleep}
+                fi
+            done
+        }
+
         if which snyk 2&>/dev/null; then
             echo "Snyk version \"$(snyk --version)\" is already installed in $(which snyk)"
         else
-            snyk_version=$(curl -SsLf https://api.github.com/repos/snyk/snyk/releases/latest | jq -r '.name')
+            snyk_version=$(curl_retry https://api.github.com/repos/snyk/snyk/releases/latest | jq -r '.name')
             echo "Identified Snyk version as ${snyk_version}"
             echo "Downloading binaries ..."
             cd ${RUNNER_TEMP}
-            curl -SsLf -O https://github.com/snyk/cli/releases/download/${snyk_version}/snyk-linux
-            curl -SsLf -O https://github.com/snyk/cli/releases/download/${snyk_version}/snyk-linux.sha256
+            curl_retry -O https://github.com/snyk/cli/releases/download/${snyk_version}/snyk-linux
+            curl_retry -O https://github.com/snyk/cli/releases/download/${snyk_version}/snyk-linux.sha256
             echo "Comparing SHA256 checksum ..."
             if [ "$(sha256sum snyk-linux)" == "$(cat snyk-linux.sha256)" ]; then
                 mv snyk-linux ${RUNNER_TOOL_CACHE}/snyk

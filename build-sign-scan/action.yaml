@@ -34,6 +34,8 @@ inputs:
     default: "artifactory.algol60.net"
   context_path:
     required: true
+  artifactory_algol60_username:
+    default: "github-actions-cray-hpe"
   artifactory_algol60_token:
     required: true
   # Not used after conversion of google-github-actions/setup-gcloud to google-github-actions/auth
@@ -62,6 +64,9 @@ inputs:
     default: ""
   docker_additional_tags:
     default: ""
+  docker_keep_revisions:
+    default: "3"
+    description: "If non-zero, indicates number of previous tags in form <original_tag>_<timestamp>.g<git_sha> to keep."
 
 runs:
   using: "composite"
@@ -77,7 +82,7 @@ runs:
       uses: docker/login-action@v1
       with:
         registry: ${{ inputs.docker_registry }}
-        username: github-actions-cray-hpe
+        username: ${{ inputs.artifactory_algol60_username }}
         password: ${{ inputs.artifactory_algol60_token }}
 
     - name: Install cosign
@@ -103,8 +108,11 @@ runs:
       uses: google-github-actions/setup-gcloud@v0
       if: ${{ inputs.docker_push == 'true' }}
 
-    - id: date
-      run: echo "::set-output name=now::$(date +'%Y-%m-%dT%H:%M:%S')"
+    - id: strings
+      run: |
+          echo "::set-output name=now::$(date +'%Y-%m-%dT%H:%M:%S')"
+          echo "::set-output name=timestamp::$(date +'%Y%m%d%H%M%S')"
+          echo "::set-output name=gitsha::${GITHUB_SHA::7}"
       shell: bash
 
     - id: base-images
@@ -131,7 +139,7 @@ runs:
         labels: |
           org.opencontainers.image.vendor=Hewlett Packard Enterprise Development LP
           baseImages=${{ steps.base-images.outputs.base_images }}
-          buildDate=${{ steps.date.outputs.now }}
+          buildDate=${{ steps.strings.outputs.now }}
 
     - name: Build Image
       uses: docker/build-push-action@v2
@@ -143,7 +151,52 @@ runs:
         tags: |
           ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
           ${{ inputs.docker_additional_tags }}
+          ${{ (inputs.docker_keep_revisions > 0) && format('{0}:{1}-{2}.g{3}', inputs.docker_repo, inputs.docker_tag, steps.strings.outputs.timestamp, steps.strings.outputs.gitsha) }}
         labels: ${{ steps.meta.outputs.labels }}
+
+    - name: Cleanup Stale Tag Revisions
+      if: ${{ (inputs.docker_push == 'true') && (inputs.docker_keep_revisions > 0) }}
+      env:
+        ARTIFACTORY_USERNAME: ${{ inputs.artifactory_algol60_username }}
+        ARTIFACTORY_TOKEN: ${{ inputs.artifactory_algol60_token }}
+        DOCKER_REPO: ${{ inputs.docker_repo }}
+        DOCKER_TAG: ${{ inputs.docker_tag }}
+        DOCKER_KEEP_REVISIONS: ${{ inputs.docker_keep_revisions }}
+      run: |
+        print("::group::Cleanup Stale Tag Revisions")
+        import requests, os, re
+
+        image_name = os.environ["DOCKER_REPO"]
+        image_tag = os.environ["DOCKER_TAG"]
+        keep_revisions = int(os.environ["DOCKER_KEEP_REVISIONS"])
+        (hostname, sep, path) = image_name.partition("/")
+        (local_repo, sep, image_path) = path.partition("/")
+
+        def http_request(path, method='GET', expect_json = True, expect_digest = False, ignore_error = False):
+            response = requests.request(method, "https://%s/artifactory/%s" % (hostname, path),
+                headers=({"Accept": "application/vnd.docker.distribution.manifest.v2+json"} if expect_digest else {}),
+                auth=(os.environ["ARTIFACTORY_USERNAME"], os.environ["ARTIFACTORY_TOKEN"]))
+            if not ignore_error:
+                response.raise_for_status()
+            return response.headers.get("docker-content-digest") if expect_digest else (response.json() if expect_json else response.text)
+
+        print("Retrieving list of tag revisions for %s:%s ..." % (image_name, image_tag))
+        pattern = re.compile("%s-[0-9]{14}\.g[a-f0-9]{7}" % re.escape(image_tag))
+        tags = sorted(filter(lambda x: pattern.fullmatch(x), http_request("api/docker/%s/v2/%s/tags/list" % (local_repo, image_path))["tags"]))
+        print("Discovered matching tags: %s" % str(tags))
+        if len(tags) > keep_revisions:
+            for tag in tags[:(len(tags) - keep_revisions)]:
+                print("Deleting %s/%s/%s ..." % (local_repo, image_path, tag))
+                sig = http_request("api/docker/%s/v2/%s/manifests/%s" % (local_repo, image_path, tag), "HEAD", False, True, True)
+                http_request("%s/%s/%s" % (local_repo, image_path, tag), "DELETE", False)
+                if sig:
+                    sig = sig.replace(":", "-")
+                    print("Deleting associated signature %s/%s/%s.sig ..." % (local_repo, image_path, sig))
+                    http_request("%s/%s/%s.sig" % (local_repo, image_path, sig), "DELETE", False, False, True)
+        else:
+            print("No tags need cleaning")
+        print("::endgroup::")
+      shell: python
 
     - name: Sign
       run: |

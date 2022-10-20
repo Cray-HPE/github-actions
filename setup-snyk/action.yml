@@ -57,11 +57,9 @@ runs:
         if which snyk 2&>/dev/null; then
             echo "Snyk version \"$(snyk --version)\" is already installed in $(which snyk)"
         else
-            # Temporary fix - v1.1036.0 download listing is missing binaries, only sources provided
-            # snyk_version=$(curl_retry https://api.github.com/repos/snyk/snyk/releases/latest | jq -r '.name')
-            snyk_version=v1.1035.0
+            snyk_version=$(curl_retry https://api.github.com/repos/snyk/snyk/releases/latest | jq -r '.name')
             echo "Identified Snyk version as ${snyk_version}"
-            echo "Downloading binaries from https://github.com/snyk/cli/releases/download/${snyk_version}/ ..."
+            echo "Downloading binaries ..."
             cd ${RUNNER_TEMP}
             curl_retry -O https://github.com/snyk/cli/releases/download/${snyk_version}/snyk-linux
             curl_retry -O https://github.com/snyk/cli/releases/download/${snyk_version}/snyk-linux.sha256

@@ -211,14 +211,25 @@ runs:
         fi
       shell: bash
 
-    - name: Snyk Setup
-      uses: Cray-HPE/github-actions/setup-snyk@main
-
     - name: Snyk Scan
-      run: snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }} || (exit ${{ inputs.fail_on_snyk_errors && '0' || '1' }} )
-      shell: bash
+      uses: docker://docker.io/snyk/snyk:docker
+      id: snyk
+      with:
+        args: snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
       env:
         SNYK_TOKEN: ${{ inputs.snyk_token }}
+      continue-on-error: true
+
+    - name: Report Snyk Scan Result
+      if: ${{ steps.snyk.outcome == 'failure' }}
+      run: |
+        if [ "${{ inputs.fail_on_snyk_errors }}" == "true" ]; then
+          echo "::error::Vulnerabilities are reported by snyk scan. Set 'fail_on_snyk_errors' input parameter to 'false' to suppress this error."
+          exit 1
+        else
+          echo "::warning::Vulnerabilities are reported by snyk scan."
+        fi
+      shell: bash
 
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master

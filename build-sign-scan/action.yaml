@@ -56,6 +56,8 @@ inputs:
     required: true
   github_sha:
     required: true
+  snyk_exclude_app_vulns:
+    default: false
   fail_on_snyk_errors:
     default: false
   fail_on_trivy_action_vulnerabilities:
@@ -215,7 +217,7 @@ runs:
       uses: docker://docker.io/snyk/snyk:docker
       id: snyk
       with:
-        args: snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
+        args: snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }} ${{ inputs.snyk_exclude_app_vulns == 'true' && '--exclude-app-vulns' || '' }}
       env:
         SNYK_TOKEN: ${{ inputs.snyk_token }}
       continue-on-error: true

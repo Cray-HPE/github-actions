@@ -146,7 +146,7 @@ runs:
           buildDate=${{ steps.strings.outputs.now }}
 
     - name: Build Image
-      uses: docker/build-push-action@v3
+      uses: docker/build-push-action@v4
       with:
         build-args: ${{ inputs.docker_build_args }}
         secrets: ${{ inputs.docker_secrets }}

@@ -213,6 +213,16 @@ runs:
         fi
       shell: bash
 
+      # Snyk Scan packaged as docker image below tries to run "docker pull" from within container
+      # and gets "The client does not have permission for manifest". Pre-pulling image if buildx pushed it directly to registry.
+    - name: Pull Image for Snyk Scan
+      if: ${{ inputs.docker_push == 'true' }}
+      run: |
+        echo "::group::Pre-pull image for Snyk Scans"
+        docker pull ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
+        echo "::endgroup::"
+      shell: bash
+
     - name: Snyk Scan
       uses: docker://docker.io/snyk/snyk:docker
       id: snyk

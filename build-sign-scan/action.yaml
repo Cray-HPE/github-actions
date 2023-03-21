@@ -57,7 +57,7 @@ inputs:
   github_sha:
     required: true
   snyk_exclude_app_vulns:
-    default: false
+    default: true
   fail_on_snyk_errors:
     default: false
   fail_on_trivy_action_vulnerabilities:

@@ -160,7 +160,7 @@ runs:
         labels: ${{ steps.meta.outputs.labels }}
 
     - name: Cleanup Stale Tag Revisions
-      if: ${{ (inputs.docker_push == 'true')
+      if: ${{ (inputs.docker_push == 'true') }}
       env:
         ARTIFACTORY_USERNAME: ${{ inputs.artifactory_algol60_username }}
         ARTIFACTORY_TOKEN: ${{ inputs.artifactory_algol60_token }}

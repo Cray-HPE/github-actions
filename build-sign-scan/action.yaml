@@ -69,7 +69,7 @@ inputs:
   docker_additional_tags:
     default: ""
   docker_keep_revisions:
-    default: "3"
+    default: "0"
     description: "If non-zero, indicates number of previous tags in form <original_tag>_<timestamp>.g<git_sha> to keep."
 
 runs:

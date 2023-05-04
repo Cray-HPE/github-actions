@@ -156,7 +156,7 @@ runs:
         tags: |
           ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
           ${{ inputs.docker_additional_tags }}
-          ${{ (inputs.docker_keep_revisions > 0) && format('{0}:{1}-{2}.g{3}', inputs.docker_repo, inputs.docker_tag, steps.strings.outputs.timestamp, steps.strings.outputs.gitsha) }}
+          ${{ (inputs.docker_keep_revisions > 0) && format('{0}:{1}-{2}.g{3}', inputs.docker_repo, inputs.docker_tag, steps.strings.outputs.timestamp, steps.strings.outputs.gitsha) || '' }}
         labels: ${{ steps.meta.outputs.labels }}
 
     - name: Cleanup Stale Tag Revisions

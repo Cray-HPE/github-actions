@@ -64,6 +64,8 @@ inputs:
     default: false
   docker_build_args:
     default: ""
+  docker_build_platforms:
+    default: ""
   docker_secrets:
     default: ""
   docker_additional_tags:
@@ -153,6 +155,7 @@ runs:
         context: ${{ inputs.context_path }}
         push: ${{ inputs.docker_push }}
         load: ${{ (inputs.docker_push != 'true') && 'true' || 'false' }}
+        platforms: ${{ inputs.docker_build_platforms }}
         tags: |
           ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
           ${{ inputs.docker_additional_tags }}

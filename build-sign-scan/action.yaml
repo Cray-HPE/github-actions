@@ -29,7 +29,7 @@ inputs:
   docker_tag:
     required: true
   docker_push:
-    required: true
+    default: true
   docker_registry:
     default: "artifactory.algol60.net"
   context_path:

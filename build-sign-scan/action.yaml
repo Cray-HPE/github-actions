@@ -146,6 +146,7 @@ runs:
           org.opencontainers.image.vendor=Hewlett Packard Enterprise Development LP
           baseImages=${{ steps.base-images.outputs.base_images }}
           buildDate=${{ steps.strings.outputs.now }}
+          workflowRef=${{ github.workflow_ref }}
 
     - name: Build Image
       uses: docker/build-push-action@v4

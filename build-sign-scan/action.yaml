@@ -33,7 +33,7 @@ inputs:
   docker_registry:
     default: "artifactory.algol60.net"
   context_path:
-    required: true
+    default: "."
   artifactory_algol60_username:
     default: "github-actions-cray-hpe"
   artifactory_algol60_token:
@@ -55,7 +55,7 @@ inputs:
   snyk_token:
     required: true
   github_sha:
-    required: true
+    default: ""
   snyk_exclude_app_vulns:
     default: true
   fail_on_snyk_errors:
@@ -210,7 +210,7 @@ runs:
     - name: Sign
       run: |
         if [[ "true" == "${{ inputs.docker_push }}" ]]; then
-          COSIGN_KEY=${{ inputs.cosign_key }} cosign sign -key ${{ inputs.cosign_key }} -a GIT_HASH=${{ inputs.github_sha }} ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
+          COSIGN_KEY=${{ inputs.cosign_key }} cosign sign -key ${{ inputs.cosign_key }} -a GIT_HASH=${{ inputs.github_sha || env.GITHUB_SHA }} ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
           echo "::notice::Signed and pushed image ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}"
         else
           echo "::notice::Skipping sign when not pushing to registry"

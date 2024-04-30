@@ -22,57 +22,77 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 #
 name: Build Scan Push
-description: Builds, scans, and pushes docker images
+description: Builds, scans, pushes and signs docker images
 inputs:
   docker_repo:
     required: true
+    description: "Full image name in form repo_hostname/short_image_name"
   docker_tag:
     required: true
+    description: "Image tag"
   docker_push:
-    default: true
+    default: "true"
+    description: "Whether to push image to registry (docker buildx build --push)"
   docker_registry:
-    default: "artifactory.algol60.net"
+    default: ""
+    description: "Docker registry to login to prior to push"
   context_path:
     default: "."
-  artifactory_algol60_username:
-    default: "github-actions-cray-hpe"
-  artifactory_algol60_token:
-    required: true
-  # Not used after conversion of google-github-actions/setup-gcloud to google-github-actions/auth
-  cosign_gcp_project_id:
+    description: "Context path to include into docker image"
+  docker_username:
     default: ""
-    deprecationMessage: "not used anymore."
-  # Deprecated in google-github-actions/auth if favor of workload identity provider authentication
-  cosign_gcp_sa_key:
+    description: "Docker registry username"
+  docker_password:
     default: ""
-    deprecationMessage: "use cosign_gcp_workload_identity_provider and cosign_gcp_service_account instead."
-  cosign_gcp_workload_identity_provider:
-    default: ""
-  cosign_gcp_service_account:
-    default: ""
-  cosign_key:
-    required: true
-  snyk_token:
-    required: true
-  github_sha:
-    default: ""
-  snyk_exclude_app_vulns:
-    default: true
-  fail_on_snyk_errors:
-    default: false
-  fail_on_trivy_action_vulnerabilities:
-    default: false
+    description: "Docker registry password"
   docker_build_args:
     default: ""
+    description: "Additional arguments for docker buildx build command"
   docker_build_platforms:
     default: ""
+    description: "List of platforms to build for, for example 'linux/arm64,linux/amd64'"
   docker_secrets:
     default: ""
+    description: "List of secrets to mount during docker build, in form name=value multi-line text"
   docker_additional_tags:
     default: ""
-  docker_keep_revisions:
-    default: "0"
-    description: "If non-zero, indicates number of previous tags in form <original_tag>_<timestamp>.g<git_sha> to keep."
+    description: "Additional tags to assign to image, multi-line text, one tag per line"
+  sign:
+    default: "true"
+    description: "Sign image with Cosign"
+  cosign_gcp_workload_identity_provider:
+    default: ""
+    description: "GCP Workload Identity Provider URL, grab at GCP console 'Edit provider' page"
+  cosign_gcp_service_account:
+    default: ""
+    description: "GCP Service Account to use for signing"
+  cosign_key:
+    default: ""
+    description: "GCP KMS key URL for signing"
+  github_sha:
+    default: ""
+    description: "Annotation to add to image signature under GITHUB_SHA name"
+  snyk:
+    default: "true"
+    description: "Perform image scan with snyk.io"
+  snyk_token:
+    default: ""
+    description: "Auth token for snyk.io"
+  snyk_exclude_app_vulns:
+    default: "false"
+    description: "Exclude app vulnerabilities during snyk scan (--exclude-app-vulns)"
+  snyk_severity_threshold:
+    default: "high"
+    description: "Report Snyk vulnerabilities only above threshold"
+  fail_on_snyk_errors:
+    default: "false"
+    description: "Fail if snyk vulnerabilities found"
+  trivy:
+    default: "true"
+    description: "Perform image scan with Trivy"
+  fail_on_trivy_action_vulnerabilities:
+    default: "false"
+    description: "Fail if Trivy errors found"
 
 runs:
   using: "composite"
@@ -80,60 +100,65 @@ runs:
     - name: Checkout repo
       uses: actions/checkout@v4
 
+    - name: Evaluate Variables
+      id: strings
+      run: |
+          echo "now=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_OUTPUT
+          DOCKER_REGISTRY="${{ inputs.docker_registry }}"
+          if [ -z "${DOCKER_REGISTRY}" ]; then
+              DOCKER_REGISTRY=$(echo "${{ inputs.docker_repo }}" | sed -e 's|/.*||')
+          fi
+          echo "docker_registry=${DOCKER_REGISTRY}" >> $GITHUB_OUTPUT
+          if  [ "${{ inputs.sign }}" == "true" ]; then
+              if [ -z "${{ inputs.cosign_gcp_workload_identity_provider }}" ]; then
+                  echo "::error::Input parameter 'cosign_gcp_workload_identity_provider' must be provided if sign is enabled"
+                  exit 1
+              fi
+              if [ -z "${{ inputs.cosign_gcp_service_account }}" ]; then
+                  echo "::error::Input parameter 'cosign_gcp_service_account' must be provided if sign is enabled"
+                  exit 1
+              fi
+              if [ -z "${{ inputs.cosign_key }}" ]; then
+                  echo "::error::Input parameter 'cosign_key' must be provided if sign is enabled"
+                  exit 1
+              fi
+          fi
+          if  [ "${{ inputs.snyk }}" == "true" ]; then
+              if [ -z "${{ inputs.snyk_token }}" ]; then
+                  echo "::error::Input parameter 'snyk_token' must be provided if snyk is enabled"
+                  exit 1
+              fi
+          fi
+      shell: bash
+
     - name: Set up Docker Buildx
       id: buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Login to algol60 Container Registry
+    - name: Login to Container Registry
       uses: docker/login-action@v3
+      if: ${{ inputs.docker_username && inputs.docker_password }} 
       with:
-        registry: ${{ inputs.docker_registry }}
-        username: ${{ inputs.artifactory_algol60_username }}
-        password: ${{ inputs.artifactory_algol60_token }}
+        registry: ${{ steps.strings.outputs.docker_registry }}
+        username: ${{ inputs.docker_username }}
+        password: ${{ inputs.docker_password }}
 
     - name: Install cosign
       uses: sigstore/cosign-installer@main
-      if: ${{ inputs.docker_push == 'true' }}
+      if: ${{ inputs.sign == 'true' }}
       with:
-        cosign-release: 'v1.0.0'
+        cosign-release: 'v2.2.4'
 
-    - name: Authenticate to GCP with Workload Identity Provider
+    - name: Authenticate to GCP
       uses: google-github-actions/auth@v2
-      if: ${{ inputs.docker_push  == 'true' && inputs.cosign_gcp_workload_identity_provider && inputs.cosign_gcp_service_account }}
+      if: ${{ inputs.sign  == 'true' }}
       with:
         workload_identity_provider: ${{ inputs.cosign_gcp_workload_identity_provider }}
         service_account: ${{ inputs.cosign_gcp_service_account }}
 
-    - name: Authenticate to GCP with SA Key
-      uses: google-github-actions/auth@v2
-      if: ${{ inputs.docker_push == 'true' && inputs.cosign_gcp_sa_key }}
-      with:
-        credentials_json: ${{ inputs.cosign_gcp_sa_key }}
-
     - name: Set up Cloud SDK for Signing
       uses: google-github-actions/setup-gcloud@v2
-      if: ${{ inputs.docker_push == 'true' }}
-
-    - id: strings
-      run: |
-          echo "now=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_OUTPUT
-          echo "timestamp=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
-          echo "gitsha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-      shell: bash
-
-    - id: base-images
-      run: |
-        echo "::group::Evaluate Base Images"
-        base_images=""
-        for image in $(grep -i -E '^FROM .+:.+' ./${{ inputs.context_path }}/Dockerfile | awk '{ print $2 }'); do
-            echo "Pulling image $image ..."
-            docker pull $image
-            base_images="${base_images} $(docker inspect $image --format '{{ index .RepoDigests 0 }}')"
-        done
-        base_images=${base_images# }
-        echo "base_images=${base_images// /,}" >> $GITHUB_OUTPUT
-        echo "::endgroup::"
-      shell: bash
+      if: ${{ inputs.sign  == 'true' }}
 
     - name: Evaluate Docker Metadata
       id: meta
@@ -144,11 +169,11 @@ runs:
           type=raw,value=${{ inputs.docker_tag }}
         labels: |
           org.opencontainers.image.vendor=Hewlett Packard Enterprise Development LP
-          baseImages=${{ steps.base-images.outputs.base_images }}
           buildDate=${{ steps.strings.outputs.now }}
           workflowRef=${{ github.workflow_ref }}
 
     - name: Build Image
+      id: build
       uses: docker/build-push-action@v5
       with:
         build-args: ${{ inputs.docker_build_args }}
@@ -160,98 +185,69 @@ runs:
         tags: |
           ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
           ${{ inputs.docker_additional_tags }}
-          ${{ (inputs.docker_keep_revisions > 0) && format('{0}:{1}-{2}.g{3}', inputs.docker_repo, inputs.docker_tag, steps.strings.outputs.timestamp, steps.strings.outputs.gitsha) || '' }}
         labels: ${{ steps.meta.outputs.labels }}
 
-    - name: Cleanup Stale Tag Revisions
-      if: ${{ (inputs.docker_push == 'true') }}
-      env:
-        ARTIFACTORY_USERNAME: ${{ inputs.artifactory_algol60_username }}
-        ARTIFACTORY_TOKEN: ${{ inputs.artifactory_algol60_token }}
-        DOCKER_REPO: ${{ inputs.docker_repo }}
-        DOCKER_TAG: ${{ inputs.docker_tag }}
-        DOCKER_KEEP_REVISIONS: ${{ inputs.docker_keep_revisions }}
-      run: |
-        print("::group::Cleanup Stale Tag Revisions")
-        import requests, os, re
-
-        image_name = os.environ["DOCKER_REPO"]
-        image_tag = os.environ["DOCKER_TAG"]
-        keep_revisions = int(os.environ["DOCKER_KEEP_REVISIONS"])
-        (hostname, sep, path) = image_name.partition("/")
-        (local_repo, sep, image_path) = path.partition("/")
-
-        def http_request(path, method='GET', expect_json = True, expect_digest = False, ignore_error = False):
-            response = requests.request(method, "https://%s/artifactory/%s" % (hostname, path),
-                headers=({"Accept": "application/vnd.docker.distribution.manifest.v2+json"} if expect_digest else {}),
-                auth=(os.environ["ARTIFACTORY_USERNAME"], os.environ["ARTIFACTORY_TOKEN"]))
-            if not ignore_error:
-                response.raise_for_status()
-            return response.headers.get("docker-content-digest") if expect_digest else (response.json() if expect_json else response.text)
-
-        print("Retrieving list of tag revisions for %s:%s ..." % (image_name, image_tag))
-        pattern = re.compile("%s-[0-9]{14}\.g[a-f0-9]{7}" % re.escape(image_tag))
-        tags = sorted(filter(lambda x: pattern.fullmatch(x), http_request("api/docker/%s/v2/%s/tags/list" % (local_repo, image_path))["tags"]))
-        print("Discovered matching tags: %s" % str(tags))
-        if len(tags) > keep_revisions:
-            for tag in tags[:(len(tags) - keep_revisions)]:
-                print("Deleting %s/%s/%s ..." % (local_repo, image_path, tag))
-                sig = http_request("api/docker/%s/v2/%s/manifests/%s" % (local_repo, image_path, tag), "HEAD", False, True, True)
-                http_request("%s/%s/%s" % (local_repo, image_path, tag), "DELETE", False)
-                if sig:
-                    sig = sig.replace(":", "-")
-                    print("Deleting associated signature %s/%s/%s.sig ..." % (local_repo, image_path, sig))
-                    http_request("%s/%s/%s.sig" % (local_repo, image_path, sig), "DELETE", False, False, True)
-        else:
-            print("No tags need cleaning")
-        print("::endgroup::")
-      shell: python
-
     - name: Sign
-      run: |
-        if [[ "true" == "${{ inputs.docker_push }}" ]]; then
-          COSIGN_KEY=${{ inputs.cosign_key }} cosign sign -key ${{ inputs.cosign_key }} -a GIT_HASH=${{ inputs.github_sha || env.GITHUB_SHA }} ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
-          echo "::notice::Signed and pushed image ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}"
-        else
-          echo "::notice::Skipping sign when not pushing to registry"
-        fi
-      shell: bash
-
-      # Snyk Scan packaged as docker image below tries to run "docker pull" from within container
-      # and gets "The client does not have permission for manifest". Pre-pulling image if buildx pushed it directly to registry.
-    - name: Pull Image for Snyk Scan
-      if: ${{ inputs.docker_push == 'true' }}
-      run: |
-        echo "::group::Pre-pull image for Snyk Scans"
-        docker pull ${{ inputs.docker_repo }}:${{ inputs.docker_tag }}
-        echo "::endgroup::"
+      if: ${{ inputs.sign == 'true' }}
+      run: cosign sign --key ${{ inputs.cosign_key }} --tlog-upload=false
+        -a GIT_HASH=${{ inputs.github_sha || github.sha }} ${{ inputs.docker_repo }}@${{ steps.build.outputs.digest }}
       shell: bash
 
     - name: Snyk Scan
       uses: docker://docker.io/snyk/snyk:docker
+      if: ${{ inputs.snyk == 'true' }}
       id: snyk
-      with:
-        args: snyk test --docker ${{ inputs.docker_repo }}:${{ inputs.docker_tag }} ${{ inputs.snyk_exclude_app_vulns == 'true' && '--exclude-app-vulns' || '' }}
       env:
         SNYK_TOKEN: ${{ inputs.snyk_token }}
+        DOCKER_USERNAME: ${{ inputs.docker_username }}
+        DOCKER_PASSWORD: ${{ inputs.docker_password }}
+        COMMAND: snyk container test --username="$DOCKER_USERNAME" --password="${DOCKER_PASSWORD}" 
+          ${{ inputs.docker_repo }}@${{ steps.build.outputs.digest }}
+          ${{ inputs.snyk_exclude_app_vulns == 'true' && '--exclude-app-vulns' || '' }}
+          --severity-threshold=${{ inputs.snyk_severity_threshold }}; echo exit_code=$? >> $GITHUB_OUTPUT
       continue-on-error: true
 
-    - name: Report Snyk Scan Result
-      if: ${{ steps.snyk.outcome == 'failure' }}
-      run: |
-        if [ "${{ inputs.fail_on_snyk_errors }}" == "true" ]; then
-          echo "::error::Vulnerabilities are reported by snyk scan. Set 'fail_on_snyk_errors' input parameter to 'false' to suppress this error."
-          exit 1
-        else
-          echo "::warning::Vulnerabilities are reported by snyk scan."
-        fi
-      shell: bash
-
-    - name: Run Trivy vulnerability scanner
+    - name: Run Trivy Vulnerability Scanner
       uses: aquasecurity/trivy-action@master
+      if: ${{ inputs.trivy == 'true' }}
+      id: trivy
       with:
         scan-type: config
         exit-code: ${{ inputs.fail_on_trivy_action_vulnerabilities && '0' || '1' }}
         scan-ref: '${{ inputs.context_path }}'
         severity: 'CRITICAL,HIGH'
         hide-progress: false
+
+    - name: Report Build Result
+      run: |
+          echo "### Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo '- Built `${{ inputs.docker_repo }}@${{ steps.build.outputs.digest }}`' >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.docker_push }}" == 'true' ]; then
+              echo '- Pushed `${{ inputs.docker_repo }}:${{ inputs.docker_tag }}` to `${{ steps.strings.outputs.docker_registry }}`' >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ inputs.sign }}" == 'true' ]; then
+              echo '- Signed `${{ inputs.docker_repo }}:${{ inputs.docker_tag }}` with Cosign' >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ inputs.snyk }}" == 'true' ]; then
+              echo '- Scanned `${{ inputs.docker_repo }}:${{ inputs.docker_tag }}` with Snyk' >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ inputs.trivy }}" == 'true' ]; then
+              echo '- Scanned `${{ inputs.docker_repo }}:${{ inputs.docker_tag }}` with Trivy' >> $GITHUB_STEP_SUMMARY
+          fi
+      shell: bash
+
+    - name: Report Snyk Scan Result
+      if: ${{ inputs.snyk == 'true' && steps.snyk.outputs.exit_code != '0' }}
+      run: |
+        if [ "${{ steps.snyk.outputs.exit_code }}" == "1" ]; then
+            message="Vulnerabilities are reported by snyk scan."
+        else
+            message="Snyk scan reported error due to misconfiguration or temporary issue."
+        fi
+        if [ "${{ inputs.fail_on_snyk_errors }}" == "true" ]; then
+            echo "::error::${message}"
+            exit 1
+        else
+            echo "::warning::${message}"
+        fi
+      shell: bash

@@ -60,18 +60,6 @@ inputs:
   sign:
     default: "true"
     description: "Sign image with Cosign"
-  cosign_gcp_workload_identity_provider:
-    default: ""
-    description: "GCP Workload Identity Provider URL, grab at GCP console 'Edit provider' page"
-  cosign_gcp_service_account:
-    default: ""
-    description: "GCP Service Account to use for signing"
-  cosign_key:
-    default: ""
-    description: "GCP KMS key URL for signing"
-  github_sha:
-    default: ""
-    description: "Annotation to add to image signature under GITHUB_SHA name"
   snyk:
     default: "true"
     description: "Perform image scan with snyk.io"
@@ -109,20 +97,6 @@ runs:
               DOCKER_REGISTRY=$(echo "${{ inputs.docker_repo }}" | sed -e 's|/.*||')
           fi
           echo "docker_registry=${DOCKER_REGISTRY}" >> $GITHUB_OUTPUT
-          if  [ "${{ inputs.sign }}" == "true" ]; then
-              if [ -z "${{ inputs.cosign_gcp_workload_identity_provider }}" ]; then
-                  echo "::error::Input parameter 'cosign_gcp_workload_identity_provider' must be provided if sign is enabled"
-                  exit 1
-              fi
-              if [ -z "${{ inputs.cosign_gcp_service_account }}" ]; then
-                  echo "::error::Input parameter 'cosign_gcp_service_account' must be provided if sign is enabled"
-                  exit 1
-              fi
-              if [ -z "${{ inputs.cosign_key }}" ]; then
-                  echo "::error::Input parameter 'cosign_key' must be provided if sign is enabled"
-                  exit 1
-              fi
-          fi
           if  [ "${{ inputs.snyk }}" == "true" ]; then
               if [ -z "${{ inputs.snyk_token }}" ]; then
                   echo "::error::Input parameter 'snyk_token' must be provided if snyk is enabled"
@@ -147,18 +121,7 @@ runs:
       uses: sigstore/cosign-installer@main
       if: ${{ inputs.sign == 'true' }}
       with:
-        cosign-release: 'v2.2.4'
-
-    - name: Authenticate to GCP
-      uses: google-github-actions/auth@v2
-      if: ${{ inputs.sign  == 'true' }}
-      with:
-        workload_identity_provider: ${{ inputs.cosign_gcp_workload_identity_provider }}
-        service_account: ${{ inputs.cosign_gcp_service_account }}
-
-    - name: Set up Cloud SDK for Signing
-      uses: google-github-actions/setup-gcloud@v2
-      if: ${{ inputs.sign  == 'true' }}
+        cosign-release: 'v2.0.1'
 
     - name: Evaluate Docker Metadata
       id: meta
@@ -187,10 +150,49 @@ runs:
           ${{ inputs.docker_additional_tags }}
         labels: ${{ steps.meta.outputs.labels }}
 
-    - name: Sign
+
+    - name: Check install!
       if: ${{ inputs.sign == 'true' }}
-      run: cosign sign --key ${{ inputs.cosign_key }} --tlog-upload=false
-        -a GIT_HASH=${{ inputs.github_sha || github.sha }} ${{ inputs.docker_repo }}@${{ steps.build.outputs.digest }}
+      run: cosign version
+      shell: bash
+
+    - name: Pull Rekor Public Key
+      if: ${{ inputs.sign == 'true' }}
+      run: curl -Ss -o rekor.pub https://sigstore-itg.it.hpe.com/rekor/api/v1/log/publicKey
+      shell: bash
+
+    - name: Pull Fulcio Root Cert
+      if: ${{ inputs.sign == 'true' }}
+      run: curl -Ss -o fulcio.root.crt https://sigstore-itg.it.hpe.com/fulcio/api/v1/rootCert
+      shell: bash
+
+    - name: Pull CT Log Public Key
+      if: ${{ inputs.sign == 'true' }}
+      run: curl -Ss -o ct_pub.pem -u ${{ inputs.docker_username }}:${{ inputs.docker_password }} https://artifactory.algol60.net/artifactory/gpg-keys/hpe-sigstore-ct-itg.pub
+      shell: bash
+
+    - name: Sign Image
+      if: ${{ inputs.sign == 'true' }}
+      env:
+        SIGSTORE_REKOR_PUBLIC_KEY: "rekor.pub"
+        SIGSTORE_ROOT_FILE: "fulcio.root.crt"
+        SIGSTORE_CT_LOG_PUBLIC_KEY_FILE: "ct_pub.pem"
+      run: cosign sign -y
+        --rekor-url=https://sigstore-itg.it.hpe.com/rekor
+        --fulcio-url=https://sigstore-itg.it.hpe.com/fulcio
+        ${{ inputs.docker_repo }}@${{ steps.build.outputs.digest }}
+      shell: bash
+
+    - name: Verify Image Signature
+      env:
+        SIGSTORE_REKOR_PUBLIC_KEY: "rekor.pub"
+        SIGSTORE_ROOT_FILE: "fulcio.root.crt"
+        SIGSTORE_CT_LOG_PUBLIC_KEY_FILE: "ct_pub.pem"
+      run: cosign verify
+        --rekor-url=https://sigstore-itg.it.hpe.com/rekor
+        --certificate-identity https://github.com/${{ github.workflow_ref }}
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com
+        ${{ inputs.docker_repo }}@${{ steps.build.outputs.digest }}
       shell: bash
 
     - name: Snyk Scan

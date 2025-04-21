@@ -1,0 +1,247 @@
+#
+# MIT License
+#
+# (C) Copyright 2025 Hewlett Packard Enterprise Development LP
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+name: Test build-sign-scan reusable workflow
+
+on:
+  push:
+    paths:
+      - .github/workflows/test-build-sign-scan.yaml
+      - tests/build-sign-scan/**
+  workflow_dispatch:
+
+jobs:
+  test-docker-build-local:
+    uses: ./.github/workflows/build-sign-scan.yaml
+    with:
+      context_path: tests/build-sign-scan/sles
+      docker_tag: artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-docker-build-local-1
+      docker_additional_tags: |
+        artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-docker-build-local-2
+      docker_build_args: |
+        --label='Random label 1'
+        --label="Random label 2"
+      env: |
+        VAR1=var1
+        VAR2='var2 var2'
+        VAR3="var3 var3"
+        VAR4='var4
+        var4'
+        VAR5="var4
+        var4"
+      docker_push: false
+      snyk: false
+      sign: false
+    secrets:
+      docker_username: ${{ secrets.ARTIFACTORY_ALGOL60_USERNAME }}
+      docker_password: ${{ secrets.ARTIFACTORY_ALGOL60_TOKEN }}
+      docker_secrets: |
+        SLES_REPO_USERNAME='${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}'
+        SLES_REPO_PASSWORD="${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}"
+        SECRET_1="SECRET_1
+        SECRET_1"
+        SECRET_2='SECRET_2
+        SECRET_2'
+      gcp_workload_identity_provider: ${{ secrets.COSIGN_GCP_WORKLOAD_IDENTITY_PROVIDER_RSA }}
+      gcp_service_account: ${{ secrets.COSIGN_GCP_SERVICE_ACCOUNT_RSA }}
+      gcp_cosign_key: ${{ secrets.COSIGN_KEY_RSA }}
+      snyk_token: ${{ secrets.SNYK_TOKEN }}
+
+  test-docker-build-single-platform:
+    uses: ./.github/workflows/build-sign-scan.yaml
+    with:
+      context_path: tests/build-sign-scan/alpine
+      docker_tag: artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-docker-build-single-platform-1
+      docker_additional_tags: |
+        artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-docker-build-single-platform-2
+      snyk: true
+      sign: true
+    secrets: inherit
+
+  test-docker-build-multi-platform:
+    uses: ./.github/workflows/build-sign-scan.yaml
+    with:
+      context_path: tests/build-sign-scan/alpine
+      docker_tag: artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-docker-build-multi-platform-1
+      docker_build_platforms: linux/amd64,linux/arm64
+      docker_additional_tags: |
+        artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-docker-build-multi-platform-2
+      snyk: true
+      sign: true
+    secrets: inherit
+
+  test-docker-build-google:
+    uses: ./.github/workflows/build-sign-scan.yaml
+    with:
+      context_path: tests/build-sign-scan/alpine
+      docker_login: false
+      docker_oidc: true
+      docker_tag: us-docker.pkg.dev/hpe-stage-csm-release/csm-docker/unstable/test-build-sign-scan:test-docker-build-google-1
+      docker_build_platforms: linux/amd64,linux/arm64
+      docker_additional_tags: |
+        us-docker.pkg.dev/hpe-stage-csm-release/csm-docker/unstable/test-build-sign-scan:test-docker-build-google-2
+      snyk: true
+      sign: true
+    secrets: inherit
+
+  test-makefile-local:
+    uses: ./.github/workflows/build-sign-scan.yaml
+    with:
+      context_path: tests/build-sign-scan/sles
+      make_target: local
+      docker_login: false
+      docker_additional_tags: |
+        artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-makefile-local-2
+      docker_build_args: |
+        --label='Random label 1'
+        --label="Random label 2"
+      env: |
+        VERSION=test-makefile-local-1
+        VAR1=var1
+        VAR2='var2 var2'
+        VAR3="var3 var3"
+        VAR4='var4
+        var4'
+        VAR5="var4
+        var4"
+      snyk: false
+      sign: false
+    secrets:
+      docker_username: ${{ secrets.ARTIFACTORY_ALGOL60_USERNAME }}
+      docker_password: ${{ secrets.ARTIFACTORY_ALGOL60_TOKEN }}
+      docker_secrets: |
+        SLES_REPO_USERNAME=${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
+        SLES_REPO_PASSWORD=${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
+        SECRET_1="SECRET_1
+        SECRET_1"
+        SECRET_2='SECRET_2
+        SECRET_2'
+      gcp_workload_identity_provider: ${{ secrets.COSIGN_GCP_WORKLOAD_IDENTITY_PROVIDER_RSA }}
+      gcp_service_account: ${{ secrets.COSIGN_GCP_SERVICE_ACCOUNT_RSA }}
+      gcp_cosign_key: ${{ secrets.COSIGN_KEY_RSA }}
+      snyk_token: ${{ secrets.SNYK_TOKEN }}
+
+  test-makefile-single-platform:
+    uses: ./.github/workflows/build-sign-scan.yaml
+    with:
+      context_path: tests/build-sign-scan/alpine
+      make_target: unstable
+      env: |
+        PLATFORM=linux/amd64
+        VERSION=test-makefile-single-platform-1
+      docker_additional_tags: |
+        artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-makefile-single-platform-2
+      snyk: true
+      sign: true
+    secrets: inherit
+
+  test-makefile-multi-platform:
+    uses: ./.github/workflows/build-sign-scan.yaml
+    with:
+      context_path: tests/build-sign-scan/alpine
+      make_target: unstable
+      env: |
+        VERSION=test-makefile-multi-platform-1
+      docker_additional_tags: |
+        artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-makefile-multi-platform-2
+      snyk: true
+      sign: true
+    secrets: inherit
+
+  test-makefile-google:
+    uses: ./.github/workflows/build-sign-scan.yaml
+    with:
+      context_path: tests/build-sign-scan/alpine
+      make_target: unstable
+      docker_login: false
+      docker_oidc: true
+      env: |
+        REGISTRY=us-docker.pkg.dev/hpe-stage-csm-release/csm-docker/unstable
+        VERSION=test-makefile-google-1
+      docker_additional_tags: |
+        us-docker.pkg.dev/hpe-stage-csm-release/csm-docker/unstable/test-build-sign-scan:test-makefile-google-2
+      snyk: true
+      sign: true
+    secrets: inherit
+
+  review:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    needs:
+    - test-docker-build-local
+    - test-docker-build-single-platform
+    - test-docker-build-multi-platform
+    - test-docker-build-google
+    - test-makefile-local
+    - test-makefile-single-platform
+    - test-makefile-multi-platform
+    - test-makefile-google
+
+    steps:
+      - name: Report Test Results
+        env:
+          NEEDS_CONTEXT: ${{ toJSON(needs) }}
+        run: |
+          function assert() {
+              if ! [[ "${2}" =~ ${3} ]]; then
+                  echo "::error::Test ${test_name}: ${1}: expected \"${3}\", got \"${2}\"."
+                  exit_code=$((exit_code+1))
+              fi
+          }
+
+          echo "$NEEDS_CONTEXT" > outputs.json
+          exit_code=0
+          for build_type in docker-build makefile; do
+              for image_type in local single-platform multi-platform google; do
+                  test_name="test-${build_type}-${image_type}"
+
+                  # Test built tags
+                  image_name=artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan
+                  test "${image_type}" == google && image_name=us-docker.pkg.dev/hpe-stage-csm-release/csm-docker/unstable/test-build-sign-scan
+                  tags=$(jq -r ".\"${test_name}\".outputs.image_tags" outputs.json | tr ',' '\n' | sort  | tr '\n' ',' | sed -e 's/,$//')
+                  assert tags "${tags}" "${image_name}:${test_name}-1,${image_name}:${test_name}-2"
+
+                  # Test built platforms
+                  platforms=$(jq -r ".\"${test_name}\".outputs.image_platforms" outputs.json)
+                  test "${image_type}" == single && assert platforms "${platforms}" '["linux/amd64"]'
+                  test "${image_type}" != local -a "${image_type}" != single-platform && assert platforms "${platforms}" '["linux/amd64","linux/arm64"]'
+
+                  # Test Snyk output
+                  snyk_summary=$(jq -r ".\"${test_name}\".outputs.snyk_summary" outputs.json)
+                  test "${image_type}" != local && assert snyk_summary "${snyk_summary}" 'crtitical: [0-9]+, high: [0-9]+, medium: [0-9]+, low: [0-9]+'
+
+                  # Test Trivy output
+                  trivy_summary=$(jq -r ".\"${test_name}\".outputs.trivy_summary" outputs.json)
+                  test "${image_type}" != local && assert trivy_summary "${trivy_summary}" '(Tests: [0-9]+ \(SUCCESSES: [0-9]+, FAILURES: [0-9]+\)|PASS)'
+
+                  # Test Scan output
+                  sign_summary=$(jq -r ".\"${test_name}\".outputs.sign_summary" outputs.json)
+                  test "${image_type}" != local && assert sign_summary "${sign_summary}" 'Signed .+ with Cosign'
+              done
+          done
+          exit $exit_code
+        shell: bash

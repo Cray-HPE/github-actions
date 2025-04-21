@@ -1,0 +1,471 @@
+#
+# MIT License
+#
+# (C) Copyright 2021-2025 Hewlett Packard Enterprise Development LP
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+name: Build Sign Scan
+description: Builds, scans, pushes and signs docker images
+on:
+  workflow_call:
+    inputs:
+      context_path:
+        type: string
+        default: "."
+        description: "Directory which contains Dockerfile or Makefile."
+
+      make_target:
+        type: string
+        default: ""
+        description: "Make target to call to build image. Either make_target or docker_tag must present."
+
+      docker_tag:
+        type: string
+        description: "Full image tag in form registry/name:tag. Either make_target or docker_tag must present."
+
+      docker_push:
+        type: boolean
+        default: true
+        description: "Perform push to registry (default). If set to false, single platform image is loaded locally (useful for testing)."
+
+      docker_login:
+        type: boolean
+        default: true
+        description: "Perform docker login into container registry."
+
+      docker_registry:
+        type: string
+        default: "artifactory.algol60.net"
+        description: "Container registry to authenticate to via docker login."
+
+      docker_oidc:
+        type: boolean
+        default: false
+        description: "Perform OIDC authentication into Google Cloud Platform during image build. We always perform OIDC auth during sign."
+
+      docker_oidc_registry:
+        type: string
+        default: "us-docker.pkg.dev"
+        description: "Google Artifact Registry to authenticate with via OIDC during image build."
+
+      docker_build_args:
+        type: string
+        default: ""
+        description: "Additional arguments for docker buildx build command"
+
+      docker_build_platforms:
+        type: string
+        default: "linux/amd64"
+        description: "List of platforms to build for, for example 'linux/arm64,linux/amd64'"
+
+      docker_additional_tags:
+        type: string
+        default: ""
+        description: "Additional tags to assign to image, multi-line text, one tag per line"
+
+      env:
+        type: string
+        default: ""
+        description: "Environment variables to inject into make / docker build, in form name=value multi-line text"
+
+      sign:
+        type: boolean
+        default: false
+        description: "Sign image with Cosign"
+
+      snyk:
+        type: boolean
+        default: true
+        description: "Perform image scan with Snyk"
+
+      snyk_severity_threshold:
+        type: string
+        default: "high"
+        description: "Report Snyk vulnerabilities only above threshold"
+
+      fail_on_snyk_errors:
+        type: boolean
+        default: false
+        description: "Fail if snyk vulnerabilities found"
+
+      trivy:
+        type: boolean
+        default: true
+        description: "Perform image scan with Trivy"
+
+      trivy_severity:
+        type: string
+        default: "CRITICAL,HIGH"
+        description: "Severity levels (comma separated) Trivy should report"
+
+      fail_on_trivy_errors:
+        type: boolean
+        default: false
+        description: "Fail if Trivy errors found"
+
+    outputs:
+      image_ref:
+        description: "Resulting image reference in form <registry>/<name>@sha256:<digest>"
+        value: ${{ jobs.build.outputs.image_ref }}
+
+      image_tags:
+        description: "All image tags built, comma separated, in form <registry>/<name>:<tag1>,<registry>/<name>:<tag2>"
+        value: ${{ jobs.build.outputs.image_tags }}
+
+      image_platforms:
+        description: "Image platforms as JSON encoded array, e.g. [\"linux/arm64\", \"linux/amd64\"]"
+        value: ${{ jobs.build.outputs.image_platforms }}
+
+      snyk_summary:
+        description: "Snyk scan summary"
+        value: ${{ jobs.scan.outputs.snyk_summary }}
+
+      trivy_summary:
+        description: "Snyk scan summary"
+        value: ${{ jobs.scan.outputs.trivy_summary }}
+
+      sign_summary:
+        description: "Snyk scan summary"
+        value: ${{ jobs.sign.outputs.sign_summary }}
+
+    secrets:
+      docker_username:
+        description: "Docker registry username, used if docker_auth set to 'login'."
+
+      docker_password:
+        description: "Docker registry password, used if docker_auth set to 'login'."
+
+      docker_secrets:
+        description: "List of secrets to mount during docker build, in form name=value multi-line text"
+
+      gcp_workload_identity_provider:
+        description: "GCP Workload Identity Provider URL. Grab at GCP console 'Edit provider' page."
+
+      gcp_service_account:
+        description: "GCP Service Account."
+
+      gcp_cosign_key:
+        description: "GCP KMS key URL for signing."
+
+      snyk_token:
+        description: "Auth token for snyk.io."
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    outputs:
+      image_ref: ${{ steps.build.outputs.image_ref }}
+      image_tags: ${{ steps.build.outputs.image_tags }}
+      image_platforms: ${{ steps.build.outputs.image_platforms }}
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Docker Buildx
+      id: buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Container Registry
+      uses: docker/login-action@v3
+      if: ${{ inputs.docker_login && inputs.docker_push }}
+      with:
+        registry: ${{ inputs.docker_registry }}
+        username: ${{ secrets.docker_username || secrets.ARTIFACTORY_ALGOL60_USERNAME }}
+        password: ${{ secrets.docker_password || secrets.ARTIFACTORY_ALGOL60_TOKEN }}
+
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@v2
+      if: ${{ inputs.docker_oidc && inputs.docker_push }}
+      with:
+        workload_identity_provider: ${{ secrets.gcp_workload_identity_provider || secrets.COSIGN_GCP_WORKLOAD_IDENTITY_PROVIDER_RSA }}
+        service_account: ${{ secrets.gcp_service_account || secrets.COSIGN_GCP_SERVICE_ACCOUNT_RSA }}
+
+    - name: Set up Cloud SDK for Image Push
+      uses: google-github-actions/setup-gcloud@v2
+      if: ${{ inputs.docker_oidc && inputs.docker_push }}
+
+    - name: Set up Docker to use gcloud for Auth
+      if: ${{ inputs.docker_oidc && inputs.docker_push }}
+      run: |-
+        gcloud -q auth configure-docker ${{ inputs.docker_oidc_registry }}
+
+    - name: Build Image
+      id: build
+      run: |
+        if [ "${RUNNER_DEBUG}" == "1" ]; then
+          set -xv
+        fi
+
+        if [ -z "${{ inputs.docker_tag }}" ] && [ -z "${{ inputs.make_target }}" ]; then
+          echo "::error::Either docker_tag or makefile_target must be spcified as input parameter."
+          exit 1
+        fi
+
+        DOCKER_ADDITIONAL_TAGS=""
+        while read -r TAG; do
+          if [ -n "${TAG}" ]; then
+            DOCKER_ADDITIONAL_TAGS+=" --tag ${TAG}"
+          fi
+        done < <(cat <<-EOF | sed -e 's/=.*$//'
+        ${{ inputs.docker_additional_tags }}
+        EOF
+        )
+
+        MANIFEST_FILE=$(mktemp)
+        DOCKER_BUILD_ARGS=$(cat <<-EOF | sed -e 's/^ *//' | tr '\n' ' '
+            --label org.opencontainers.image.vendor="Hewlett Packard Enterprise Development LP"
+            --label buildDate=$(date +'%Y-%m-%dT%H:%M:%S')
+            --label workflowRef="${{ github.workflow_ref }}"
+            --metadata-file="${MANIFEST_FILE}"
+            ${DOCKER_ADDITIONAL_TAGS}
+            ${{ inputs.docker_build_args }}
+        EOF
+        )
+
+        DOCKER_ENV=$(cat <<-EOF | sed -e 's/^ *//' | tr '\n' ' '
+        ${{ inputs.env }}
+        ${{ secrets.docker_secrets }}
+        EOF
+        )
+
+        MAKE_ENV=$(cat <<-EOF | sed -e 's/^ *//' | tr '\n' ' '
+        ${{ inputs.env }}
+        EOF
+        )
+
+        DOCKER_SECRET_ARGS=""
+        while read -r SECRET_NAME; do
+            if [ -n "${SECRET_NAME}" ]; then
+                DOCKER_SECRET_ARGS+=" --secret id=${SECRET_NAME},env=${SECRET_NAME}"
+            fi
+        done < <(cat <<-EOF | sed -e 's/=.*$//'
+        ${{ secrets.docker_secrets }}
+        EOF
+        )
+
+        if [ -n "${{ inputs.make_target }}" ]; then
+          command="make -C \"${{ inputs.context_path }}\" ${{ inputs.make_target }} DOCKER_BUILD_ARGS=\"${DOCKER_BUILD_ARGS//\"/\\\"}\" ${MAKE_ENV}"
+        else
+          command="docker buildx build ${{ inputs.docker_push && '--push' || '--load' }} --platform \"${{ inputs.docker_build_platforms }}\" ${DOCKER_SECRET_ARGS} ${DOCKER_BUILD_ARGS} --tag \"${{ inputs.docker_tag }}\" \"${{ inputs.context_path }}\""
+        fi
+        echo "+ ${command}"
+        /usr/bin/env -S "${DOCKER_ENV}" bash -c "${command}"
+
+        if [ ! -f "${MANIFEST_FILE}" ]; then
+          echo "::error::Unable to determine Image ID after build. Is DOCKER_BUILD_ARGS environment variable honored by docker build command in Makefile?"
+          exit 1
+        fi
+
+        IMAGE_REF=$(jq -r '(."image.name" | split(":") | .[0]) + "@" + ."containerimage.digest"' "${MANIFEST_FILE}")
+        IMAGE_ARCH=$(docker manifest inspect "${IMAGE_REF}"| jq -r '.manifests[].platform | select(.architecture != "unknown") | (.os + "/" + .architecture)')
+        echo "Image ${IMAGE_REF} built for platforms:"
+        echo "${IMAGE_ARCH}"
+        echo "image_ref=${IMAGE_REF}" >> $GITHUB_OUTPUT
+        echo image_platforms=$(echo "${IMAGE_ARCH}" | jq -R | jq -sc) >> $GITHUB_OUTPUT
+        jq -r '"image_tags=" + ."image.name"' "${MANIFEST_FILE}" >> $GITHUB_OUTPUT
+
+    - name: Report Build Result
+      run: |
+          echo "### Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo '- Built `${{ steps.build.outputs.image_ref }}`' >> $GITHUB_STEP_SUMMARY
+          IFS=, read -ra image_tags <<< "${{ steps.build.outputs.image_tags }}"
+          for image_tag in "${image_tags[@]}"; do
+              if [ "${{ inputs.docker_push }}" == "true" ]; then
+                echo "- Pushed as \`${image_tag}\` to registry" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "- Loaded as \`${image_tag}\` into local docker daemon" >> $GITHUB_STEP_SUMMARY
+              fi
+          done
+      shell: bash
+
+  scan:
+    if: inputs.snyk
+    runs-on: ubuntu-latest
+    needs: build
+
+    strategy:
+      matrix:
+        platform: ${{ fromJSON(needs.build.outputs.image_platforms) }}
+      fail-fast: false
+
+    outputs:
+      snyk_summary: ${{ steps.report.outputs.snyk_summary }}
+      trivy_summary: ${{ steps.report.outputs.trivy_summary }}
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Login to Container Registry
+      uses: docker/login-action@v3
+      if: ${{ inputs.docker_login }}
+      with:
+        registry: ${{ inputs.docker_registry || 'artifactory.algol60.net' }}
+        username: ${{ secrets.docker_username || secrets.ARTIFACTORY_ALGOL60_USERNAME }}
+        password: ${{ secrets.docker_password || secrets.ARTIFACTORY_ALGOL60_TOKEN }}
+
+    - name: Setup Snyk
+      uses: snyk/actions/setup@master
+
+    - name: Snyk Scan
+      id: snyk
+      env:
+        SNYK_TOKEN: ${{ secrets.snyk_token || secrets.SNYK_TOKEN }}
+      run: |
+        snyk config set disableSuggestions=true
+        bash -c "snyk container test ${{ needs.build.outputs.image_ref }} \
+          --platform='${{ matrix.platform }}' \
+          --severity-threshold='${{ inputs.snyk_severity_threshold }}' \
+          --file='${{ inputs.context_path }}/Dockerfile' \
+          --json-file-output=snyk.json \
+          --sarif-file-output=snyk.sarif; \
+          echo exit_code=\$? >> $GITHUB_OUTPUT" | tee snyk.txt
+      continue-on-error: true
+
+    - name: Run Trivy Vulnerability Scanner
+      uses: aquasecurity/trivy-action@master
+      if: ${{ inputs.trivy }}
+      id: trivy
+      with:
+        scan-type: config
+        exit-code: 0
+        scan-ref: '${{ inputs.context_path }}'
+        severity: '${{ inputs.trivy_severity }}'
+        hide-progress: true
+        output: trivy.txt
+
+    - name: Report Scan Results
+      id: report
+      run: |
+        echo "### Image Scan Summary for ${{ matrix.platform }}" >> $GITHUB_STEP_SUMMARY
+        if [[ -s snyk.txt ]]; then
+          # Remove ^[[ color codes
+          sed -i -r 's/\x1B\[[0-9;]*m//g' snyk.txt
+          snyk_summary=$(jq -r 'def count(l): [.vulnerabilities[] | select(.severity==l) | .id] | unique | length; "crtitical: \(count("critical")), high: \(count("high")), medium: \(count("medium")), low: \(count("low"))"' snyk.json)
+          {
+            echo ""
+            echo "<details><summary>Snyk scan details: ${snyk_summary}</summary>" >> $GITHUB_STEP_SUMMARY
+            echo ""
+            echo '```terraform'
+            cat snyk.txt
+            echo '```'
+            echo "</details>"
+          } >> $GITHUB_STEP_SUMMARY
+          echo "snyk_summary="${snyk_summary}"" >> $GITHUB_OUTPUT
+        fi
+        if [[ -s trivy.txt ]]; then
+          trivy_summary=$(grep '^Tests: ' trivy.txt || echo PASSED)
+          {
+            echo ""
+            echo "<details><summary>Trivy scan details: $(trivy_summary)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo ""
+            echo '```terraform'
+            cat trivy.txt
+            echo '```'
+            echo "</details>"
+          } >> $GITHUB_STEP_SUMMARY
+          echo "trivy_summary="${trivy_summary}"" >> $GITHUB_OUTPUT
+        fi
+        if [ ${{ steps.snyk.outputs.exit_code }} -eq 1 ]; then
+            if [ "${{ inputs.fail_on_snyk_errors }}" == "true" ]; then
+              echo "::error::Snyk scan found vulnerabilities and fail_on_snyk_errors is set to 'true'."
+              exit ${{ steps.snyk.outputs.exit_code }}
+            else
+              echo "::warning::Snyk scan found vulnerabilities for image ${{ needs.build.outputs.image_ref }}, platform ${{ matrix.platform }}: ${snyk_summary}"
+            fi
+        fi
+        if [ ${{ steps.snyk.outputs.exit_code }} -gt 1 ]; then
+            echo "::error::Snyk scan failed due to misconfiguration or other issue."
+            exit ${{ steps.snyk.outputs.exit_code }}
+        fi
+        if grep -q '^Failures:' trivy.txt; then
+            if [ "${{ inputs.fail_on_trivy_errors }}" == "true" ]; then
+              echo "::error::Trivy scan found vulnerabilities and fail_on_trivy_errors is set to 'true'."
+              exit 1
+            else
+              echo "::warning::Trivy scan found vulnerabilities for image ${{ needs.build.outputs.image_ref }}, platform ${{ matrix.platform }}: $(grep '^Failures:' trivy.txt)"
+            fi
+        fi
+      shell: bash
+
+    - name: Upload result to GitHub Code Scanning
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: snyk.sarif
+
+  sign:
+    if: inputs.sign
+    needs: [build, scan]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    outputs:
+      sign_summary: ${{ steps.sign.outputs.summary }}
+
+    steps:
+    - name: Install cosign
+      uses: sigstore/cosign-installer@main
+      with:
+        cosign-release: 'v2.2.4'
+
+    - name: Login to Container Registry
+      uses: docker/login-action@v3
+      if: ${{ inputs.docker_login }}
+      with:
+        registry: ${{ inputs.docker_registry }}
+        username: ${{ secrets.docker_username || secrets.ARTIFACTORY_ALGOL60_USERNAME }}
+        password: ${{ secrets.docker_password || secrets.ARTIFACTORY_ALGOL60_TOKEN }}
+
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.gcp_workload_identity_provider || secrets.COSIGN_GCP_WORKLOAD_IDENTITY_PROVIDER_RSA }}
+        service_account: ${{ secrets.gcp_service_account || secrets.COSIGN_GCP_SERVICE_ACCOUNT_RSA }}
+
+    - name: Set up Cloud SDK for Signing
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Set up Docker to use gcloud for Auth
+      if: ${{ inputs.docker_oidc }}
+      run: |-
+        gcloud -q auth configure-docker ${{ inputs.docker_oidc_registry }}
+
+    - name: Sign
+      id: sign
+      run: |
+        cosign sign --key ${{ secrets.gcp_cosign_key || secrets.COSIGN_KEY_RSA }} --tlog-upload=false \
+            -a GIT_HASH=${{ github.sha }} ${{ needs.build.outputs.image_ref }}
+        echo "### Image Sign Summary" >> $GITHUB_STEP_SUMMARY
+        echo '- Signed `${{ needs.build.outputs.image_ref }}` with Cosign' >> $GITHUB_STEP_SUMMARY
+        echo 'summary=Signed ${{ needs.build.outputs.image_ref }} with Cosign' >> $GITHUB_OUTPUT
+      shell: bash

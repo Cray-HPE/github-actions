@@ -384,7 +384,7 @@ jobs:
           trivy_summary=$(grep '^Tests: ' trivy.txt || echo PASSED)
           {
             echo ""
-            echo "<details><summary>Trivy scan details: $(trivy_summary)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "<details><summary>Trivy scan details: ${trivy_summary}</summary>" >> $GITHUB_STEP_SUMMARY
             echo ""
             echo '```terraform'
             cat trivy.txt

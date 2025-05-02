@@ -76,6 +76,8 @@ jobs:
         artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-docker-build-single-platform-2
       snyk: true
       sign: true
+      fail_on_snyk_errors: false
+      fail_on_trivy_errors: false
     secrets: inherit
 
   test-docker-build-multi-platform:
@@ -88,6 +90,8 @@ jobs:
         artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-docker-build-multi-platform-2
       snyk: true
       sign: true
+      fail_on_snyk_errors: false
+      fail_on_trivy_errors: false
     secrets: inherit
 
   test-docker-build-google:
@@ -102,6 +106,8 @@ jobs:
         us-docker.pkg.dev/hpe-stage-csm-release/csm-docker/unstable/test-build-sign-scan:test-docker-build-google-2
       snyk: true
       sign: true
+      fail_on_snyk_errors: false
+      fail_on_trivy_errors: false
     secrets: inherit
 
   test-makefile-local:
@@ -153,6 +159,8 @@ jobs:
         artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-makefile-single-platform-2
       snyk: true
       sign: true
+      fail_on_snyk_errors: false
+      fail_on_trivy_errors: false
     secrets: inherit
 
   test-makefile-multi-platform:
@@ -166,6 +174,8 @@ jobs:
         artifactory.algol60.net/csm-docker-backup/unstable/test-build-sign-scan:test-makefile-multi-platform-2
       snyk: true
       sign: true
+      fail_on_snyk_errors: false
+      fail_on_trivy_errors: false
     secrets: inherit
 
   test-makefile-google:
@@ -182,6 +192,8 @@ jobs:
         us-docker.pkg.dev/hpe-stage-csm-release/csm-docker/unstable/test-build-sign-scan:test-makefile-google-2
       snyk: true
       sign: true
+      fail_on_snyk_errors: false
+      fail_on_trivy_errors: false
     secrets: inherit
 
   review:

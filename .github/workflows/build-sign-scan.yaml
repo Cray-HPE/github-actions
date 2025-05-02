@@ -102,7 +102,7 @@ on:
 
       fail_on_snyk_errors:
         type: boolean
-        default: false
+        default: true
         description: "Fail if snyk vulnerabilities found"
 
       trivy:
@@ -117,7 +117,7 @@ on:
 
       fail_on_trivy_errors:
         type: boolean
-        default: false
+        default: true
         description: "Fail if Trivy errors found"
 
     outputs:

@@ -29,7 +29,7 @@ Also, access to `secrets` context is required. Please refer to workflow file for
           uses: Cray-HPE/.github/workflows//build-sign-scan.yaml@build-sign-scan-workflow/v1
           with:
             make_target: ${{ github.ref_type == 'tag' && 'stable' || 'unstable' }}
-            secrets: inherit
+          secrets: inherit
 
     NOTE: `Makefle` must honor `DOCKER_BUILD_ARGS` environment variable.
 
@@ -40,7 +40,7 @@ Also, access to `secrets` context is required. Please refer to workflow file for
           uses: Cray-HPE/.github/workflows//build-sign-scan.yaml@build-sign-scan-workflow/v1
           with:
             docker_tag: artifactory.algol60.net/csm-docker/${{ github.ref_type == 'tag' && 'stable' || 'unstable' }}/my-image:tag
-            secrets: inherit
+          secrets: inherit
 
 In these examples, `Makefile` target `stable` is called when build is invoked on git tag, otherwise `unstable` target is called (i.e. tag-based release strategy is used).
 

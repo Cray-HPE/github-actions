@@ -1,4 +1,4 @@
-# Resuable Github Actions and Workflows
+# Reusable Github Actions and Workflows
 
 ## Build Sign Scan Reusable Workflow
 

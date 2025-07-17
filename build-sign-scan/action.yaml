@@ -171,6 +171,7 @@ runs:
           org.opencontainers.image.vendor=Hewlett Packard Enterprise Development LP
           buildDate=${{ steps.strings.outputs.now }}
           workflowRef=${{ github.workflow_ref }}
+          workflowRef.${{ inputs.docker_repo }}:${{ inputs.docker_tag }}=${{ github.workflow_ref }}
 
     - name: Build Image
       id: build
